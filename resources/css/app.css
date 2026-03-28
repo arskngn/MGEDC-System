@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Google Places dropdown above modals (z-[210]+) */
+.pac-container {
+    z-index: 9999 !important;
+}
