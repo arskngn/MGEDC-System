@@ -6,11 +6,30 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property int $id
+ * @property int $customer_id
+ * @property int $warehouse_id
+ * @property string $invoice_no
+ * @property \Carbon\Carbon $sale_date
+ * @property string|null $note
+ * @property float $subtotal
+ * @property float $discount
+ * @property float $receivable_amount
+ * @property float $paid_amount
+ * @property \Carbon\Carbon|null $created_at
+ * @property \Carbon\Carbon|null $updated_at
+ * @property-read Customer $customer
+ * @property-read Warehouse $warehouse
+ * @property-read \Illuminate\Database\Eloquent\Collection|SaleItem[] $items
+ * @property-read float $due_amount
+ */
 class Sale extends Model
 {
     protected $fillable = [
         'customer_id',
         'warehouse_id',
+        'user_id',
         'invoice_no',
         'sale_date',
         'note',
@@ -39,6 +58,11 @@ class Sale extends Model
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function items(): HasMany

@@ -14,6 +14,7 @@ use App\Models\SalePayment;
 use App\Models\SaleReturn;
 use App\Models\SaleReturnPayment;
 use App\Models\Warehouse;
+use App\Services\SaleService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SaleController extends Controller
 {
+    public function __construct(
+        protected SaleService $saleService
+    ) {}
+
     public function index(Request $request): View
     {
         $perPage = GeneralSetting::first()?->records_per_page ?? 15;
@@ -65,37 +70,13 @@ class SaleController extends Controller
 
     public function store(StoreSaleRequest $request): RedirectResponse
     {
-        $data = $this->buildTotalsFromItems($request->validated()['items'], (float) $request->validated()['discount']);
-        if ($data['receivable'] < 0) {
+        $totals = $this->saleService->calculateTotals($request->validated()['items'], (float) $request->validated()['discount']);
+        
+        if ($totals['receivable'] < 0) {
             return back()->withInput()->withErrors(['discount' => 'Discount cannot exceed subtotal.']);
         }
 
-        DB::transaction(function () use ($request, $data) {
-            $sale = Sale::create([
-                'invoice_no' => $request->validated()['invoice_no'],
-                'customer_id' => $request->validated()['customer_id'],
-                'warehouse_id' => $request->validated()['warehouse_id'],
-                'sale_date' => $request->validated()['sale_date'],
-                'note' => $request->validated()['note'] ?? null,
-                'subtotal' => $data['subtotal'],
-                'discount' => $data['discount'],
-                'receivable_amount' => $data['receivable'],
-                'paid_amount' => 0,
-            ]);
-
-            foreach ($data['lines'] as $line) {
-                SaleItem::create([
-                    'sale_id' => $sale->id,
-                    'product_id' => $line['product_id'],
-                    'product_name' => $line['product_name'],
-                    'sku' => $line['sku'],
-                    'quantity' => $line['quantity'],
-                    'unit_label' => $line['unit_label'],
-                    'unit_price' => $line['unit_price'],
-                    'line_total' => $line['line_total'],
-                ]);
-            }
-        });
+        $this->saleService->createSale($request->validated());
 
         return redirect()->route('sales.all')->with('success', 'Sale created successfully.');
     }
@@ -124,42 +105,17 @@ class SaleController extends Controller
             return back()->with('error', 'You cannot edit a sale after a return has been recorded.');
         }
 
-        $data = $this->buildTotalsFromItems($request->validated()['items'], (float) $request->validated()['discount']);
-        if ($data['receivable'] < 0) {
+        $totals = $this->saleService->calculateTotals($request->validated()['items'], (float) $request->validated()['discount']);
+        
+        if ($totals['receivable'] < 0) {
             return back()->withInput()->withErrors(['discount' => 'Discount cannot exceed subtotal.']);
         }
 
-        if ($data['receivable'] < (float) $sale->paid_amount - 0.0001) {
+        if ($totals['receivable'] < (float) $sale->paid_amount - 0.0001) {
             return back()->withInput()->withErrors(['discount' => 'Receivable cannot be less than amount already received.']);
         }
 
-        DB::transaction(function () use ($request, $sale, $data) {
-            $sale->items()->delete();
-
-            $sale->update([
-                'invoice_no' => $request->validated()['invoice_no'],
-                'customer_id' => $request->validated()['customer_id'],
-                'warehouse_id' => $request->validated()['warehouse_id'],
-                'sale_date' => $request->validated()['sale_date'],
-                'note' => $request->validated()['note'] ?? null,
-                'subtotal' => $data['subtotal'],
-                'discount' => $data['discount'],
-                'receivable_amount' => $data['receivable'],
-            ]);
-
-            foreach ($data['lines'] as $line) {
-                SaleItem::create([
-                    'sale_id' => $sale->id,
-                    'product_id' => $line['product_id'],
-                    'product_name' => $line['product_name'],
-                    'sku' => $line['sku'],
-                    'quantity' => $line['quantity'],
-                    'unit_label' => $line['unit_label'],
-                    'unit_price' => $line['unit_price'],
-                    'line_total' => $line['line_total'],
-                ]);
-            }
-        });
+        $this->saleService->updateSale($sale, $request->validated());
 
         return redirect()->route('sales.all')->with('success', 'Sale updated successfully.');
     }
@@ -172,14 +128,7 @@ class SaleController extends Controller
             return back()->withErrors(['receiving_amount' => 'Amount cannot exceed the due balance.']);
         }
 
-        DB::transaction(function () use ($sale, $receiving, $request) {
-            SalePayment::create([
-                'sale_id' => $sale->id,
-                'user_id' => $request->user()?->id,
-                'amount' => $receiving,
-            ]);
-            $sale->increment('paid_amount', $receiving);
-        });
+        $this->saleService->receivePayment($sale, $receiving, $request->user()?->id);
 
         return back()->with('success', 'Payment received successfully.');
     }
@@ -239,62 +188,12 @@ class SaleController extends Controller
             return back()->withInput()->withErrors(['return_items' => 'At least one item must have a return quantity greater than zero.']);
         }
 
-        $subtotal = 0;
-        $lines = [];
-
-        foreach ($returnItems as $item) {
-            $saleItem = $sale->items->firstWhere('id', $item['sale_item_id']);
-            if (! $saleItem) {
-                continue;
-            }
-
-            $returnQty = (float) $item['return_quantity'];
-            $lineTotal = round($returnQty * (float) $saleItem->unit_price, 2);
-            $subtotal += $lineTotal;
-
-            $lines[] = [
-                'sale_item_id' => $saleItem->id,
-                'product_id' => $saleItem->product_id,
-                'product_name' => $saleItem->product_name,
-                'sku' => $saleItem->sku,
-                'sale_quantity' => $saleItem->quantity,
-                'return_quantity' => $returnQty,
-                'unit_label' => $saleItem->unit_label,
-                'unit_price' => $saleItem->unit_price,
-                'line_total' => $lineTotal,
-            ];
-        }
-
-        $discount = round((float) $request->input('discount', 0), 2);
-        $payable = round(max(0, $subtotal - $discount), 2);
-
-        // Generate return invoice number
-        $maxReturnNo = \App\Models\SaleReturn::query()
-            ->where('return_invoice_no', 'like', 'SR-%')
-            ->get()
-            ->map(fn ($r) => (int) preg_replace('/\D/', '', substr($r->return_invoice_no, 3)))
-            ->max() ?? 0;
-        $returnInvoiceNo = 'SR-'.str_pad((string) ($maxReturnNo + 1), 6, '0', STR_PAD_LEFT);
-
-        DB::transaction(function () use ($sale, $lines, $subtotal, $discount, $payable, $returnInvoiceNo, $request) {
-            $saleReturn = \App\Models\SaleReturn::create([
-                'sale_id' => $sale->id,
-                'return_invoice_no' => $returnInvoiceNo,
-                'return_date' => now()->toDateString(),
-                'warehouse_id' => $sale->warehouse_id,
-                'subtotal' => $subtotal,
-                'discount' => $discount,
-                'payable_amount' => $payable,
-                'paid_amount' => 0,
-                'note' => $request->input('note'),
-            ]);
-
-            foreach ($lines as $line) {
-                \App\Models\SaleReturnItem::create(array_merge($line, [
-                    'sale_return_id' => $saleReturn->id,
-                ]));
-            }
-        });
+        $this->saleService->storeReturn(
+            $sale,
+            $returnItems->toArray(),
+            (float) $request->input('discount', 0),
+            $request->input('note')
+        );
 
         return redirect()->route('sales.all')->with('success', 'Sale return recorded successfully.');
     }
@@ -366,44 +265,6 @@ class SaleController extends Controller
         ])->setPaper('a4', 'portrait');
 
         return $pdf->download('sale-'.$sale->invoice_no.'.pdf');
-    }
-
-    /**
-     * @param  array<int, array{product_id: int, quantity: float|int|string, unit_price: float|int|string}>  $items
-     * @return array{subtotal: float, discount: float, receivable: float, lines: list<array<string, mixed>>}
-     */
-    private function buildTotalsFromItems(array $items, float $discount): array
-    {
-        $subtotal = 0;
-        $lines = [];
-
-        foreach ($items as $row) {
-            $product = Product::with('unit')->findOrFail($row['product_id']);
-            $qty = (float) $row['quantity'];
-            $price = (float) $row['unit_price'];
-            $lineTotal = round($qty * $price, 2);
-            $subtotal += $lineTotal;
-
-            $lines[] = [
-                'product_id' => $product->id,
-                'product_name' => $product->name,
-                'sku' => $product->sku,
-                'quantity' => $qty,
-                'unit_label' => $product->unit->short_name ?? $product->unit->name,
-                'unit_price' => $price,
-                'line_total' => $lineTotal,
-            ];
-        }
-
-        $discount = round($discount, 2);
-        $receivable = round(max(0, $subtotal - $discount), 2);
-
-        return [
-            'subtotal' => round($subtotal, 2),
-            'discount' => $discount,
-            'receivable' => $receivable,
-            'lines' => $lines,
-        ];
     }
 
     private function filteredSalesQuery(Request $request)

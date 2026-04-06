@@ -6,7 +6,7 @@ use App\Http\Requests\StoreCustomerRequest;
 use App\Http\Requests\UpdateCustomerRequest;
 use App\Models\Customer;
 use App\Models\GeneralSetting;
-use App\Support\CsvImportReader;
+use App\Services\CustomerService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +16,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class CustomerController extends Controller
 {
     use \App\Http\Controllers\Concerns\ResolvesCsvUploadPath;
+
+    public function __construct(protected CustomerService $customerService)
+    {
+    }
 
     public function index(Request $request): View
     {
@@ -30,28 +34,14 @@ class CustomerController extends Controller
 
     public function store(StoreCustomerRequest $request)
     {
-        $data = $request->validated();
-
-        Customer::create([
-            'name' => $data['name'],
-            'phone' => $data['mobile'],
-            'email' => $data['email'],
-            'address' => $data['address'] ?? null,
-        ]);
+        $this->customerService->createCustomer($request->validated());
 
         return redirect()->route('customers.index')->with('success', 'Customer created successfully.');
     }
 
     public function update(UpdateCustomerRequest $request, Customer $customer)
     {
-        $data = $request->validated();
-
-        $customer->update([
-            'name' => $data['name'],
-            'phone' => $data['mobile'],
-            'email' => $data['email'],
-            'address' => $data['address'] ?? null,
-        ]);
+        $this->customerService->updateCustomer($customer, $request->validated());
 
         return redirect()->route('customers.index')->with('success', 'Customer updated successfully.');
     }
@@ -73,34 +63,8 @@ class CustomerController extends Controller
     public function exportCsvAll(Request $request): StreamedResponse
     {
         $customers = $this->filteredCustomersQuery($request)->get();
-        $filename = 'customers-'.time().'.csv';
 
-        return response()->streamDownload(function () use ($customers) {
-            $out = fopen('php://output', 'w');
-            fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
-
-            fputcsv($out, [
-                'name',
-                'email',
-                'mobile',
-                'address',
-                'receivable',
-                'payable',
-            ]);
-
-            foreach ($customers as $c) {
-                fputcsv($out, [
-                    $c->name,
-                    $c->email ?? '',
-                    $c->phone ?? '',
-                    $c->address ?? '',
-                    (string) ($c->receivable_total ?? 0),
-                    (string) ($c->payable_total ?? 0),
-                ]);
-            }
-
-            fclose($out);
-        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+        return $this->customerService->exportToCsv($customers);
     }
 
     public function importSample(): StreamedResponse
@@ -127,80 +91,18 @@ class CustomerController extends Controller
         $file = $request->file('csv_file');
         $path = $this->csvUploadPath($file);
 
-        $opened = CsvImportReader::open($path);
-        if ($opened === null) {
-            return back()->with('error', 'Could not read the uploaded file or the CSV is empty.');
+        $result = $this->customerService->importFromCsv($path);
+
+        if (isset($result['error'])) {
+            return back()->with('error', $result['error']);
         }
 
-        $handle = $opened['handle'];
-        $delimiter = $opened['delimiter'];
-        $header = $opened['header'];
-
-        $map = [];
-        foreach ($header as $i => $col) {
-            $key = strtolower(trim((string) $col));
-            $map[$key] = $i;
-        }
-
-        $required = ['name', 'email', 'mobile'];
-        foreach ($required as $col) {
-            if (! isset($map[$col])) {
-                fclose($handle);
-                return back()->with('error', 'Missing required column: '.$col.'. Use the sample template.');
+        if ($result['skipped'] > 0) {
+            $msg = 'Imported ' . $result['imported'] . ' customers. Skipped ' . $result['skipped'] . ' rows.';
+            if ($result['firstError']) {
+                $msg .= ' ' . $result['firstError'];
             }
-        }
-
-        $rowNum = 1;
-        $imported = 0;
-        $skipped = 0;
-        $firstError = null;
-
-        while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
-            $rowNum++;
-            if ($this->csvRowIsEmpty($row)) {
-                continue;
-            }
-
-            $name = trim((string) ($row[$map['name']] ?? ''));
-            $email = trim((string) ($row[$map['email']] ?? ''));
-            $mobile = trim((string) ($row[$map['mobile']] ?? ''));
-            $address = isset($map['address']) ? trim((string) ($row[$map['address']] ?? '')) : null;
-
-            if ($name === '' || $email === '' || $mobile === '') {
-                $skipped++;
-                $firstError ??= 'Row '.$rowNum.': name, email, and mobile are required.';
-                continue;
-            }
-
-            $exists = Customer::query()
-                ->where('email', $email)
-                ->orWhere('phone', $mobile)
-                ->exists();
-
-            if ($exists) {
-                $skipped++;
-                $firstError ??= 'Row '.$rowNum.': customer with the same email or mobile already exists.';
-                continue;
-            }
-
-            try {
-                Customer::create([
-                    'name' => $name,
-                    'phone' => $mobile,
-                    'email' => $email,
-                    'address' => $address !== '' ? $address : null,
-                ]);
-                $imported++;
-            } catch (\Throwable $e) {
-                $skipped++;
-                $firstError ??= 'Row '.$rowNum.': failed to import ('.$e->getMessage().').';
-            }
-        }
-
-        fclose($handle);
-
-        if ($skipped > 0) {
-            return redirect()->route('customers.index')->with('error', 'Imported '.$imported.' customers. Skipped '.$skipped.' rows.'.($firstError ? ' '.$firstError : ''));
+            return redirect()->route('customers.index')->with('error', $msg);
         }
 
         return redirect()->route('customers.index')->with('success', 'Customers imported successfully.');

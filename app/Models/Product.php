@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\PurchaseReturnItem;
 use App\Models\SaleItem;
 use App\Models\SaleReturnItem;
+use App\Models\AdjustmentItem;
 
 /**
  * @property int $id
@@ -40,6 +41,7 @@ class Product extends Model
         'default_sale_price',
         'alert_quantity',
         'note',
+        'current_stock',
     ];
 
     protected function casts(): array
@@ -48,6 +50,7 @@ class Product extends Model
             'default_purchase_price' => 'decimal:2',
             'default_sale_price' => 'decimal:2',
             'alert_quantity' => 'decimal:4',
+            'current_stock' => 'decimal:4',
         ];
     }
 
@@ -77,16 +80,34 @@ class Product extends Model
     }
 
     /**
-     * Stock from purchases minus purchase returns (sales module not wired yet).
+     * Stock from purchases minus purchase returns, minus sales, plus sale returns, and adjustments.
      */
-    public function getCurrentStockAttribute(): float
+    public function getCalculatedStock(): float
     {
         $purchased = (float) $this->purchaseItems()->sum('quantity');
         $purchaseReturned = (float) PurchaseReturnItem::where('product_id', $this->id)->sum('return_quantity');
         $sold = (float) SaleItem::where('product_id', $this->id)->sum('quantity');
         $saleReturned = (float) SaleReturnItem::where('product_id', $this->id)->sum('return_quantity');
+        
+        // Adjustments
+        $adjustmentAddition = (float) AdjustmentItem::where('product_id', $this->id)
+            ->where('type', \App\Enums\AdjustmentType::Addition->value)
+            ->sum('adjust_qty');
+        $adjustmentSubtraction = (float) AdjustmentItem::where('product_id', $this->id)
+            ->where('type', \App\Enums\AdjustmentType::Subtraction->value)
+            ->sum('adjust_qty');
 
-        return max(0, round($purchased - $purchaseReturned - $sold + $saleReturned, 4));
+        return round($purchased - $purchaseReturned - $sold + $saleReturned + $adjustmentAddition - $adjustmentSubtraction, 4);
+    }
+
+    /**
+     * Recalculate and update the current_stock column.
+     */
+    public function updateStock(): void
+    {
+        $this->update([
+            'current_stock' => $this->getCalculatedStock()
+        ]);
     }
 
     /**

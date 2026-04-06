@@ -27,6 +27,8 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerPaymentController;
 use App\Http\Controllers\CustomerNotificationController;
 use App\Http\Controllers\SaleController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\StaffPerformanceController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -34,9 +36,8 @@ Route::get('/', function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('/dashboard', function () {
-        return view('dashboard');
-    })->name('dashboard')->middleware('permission:Dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard')->middleware('permission:Dashboard');
+    Route::get('/dashboard/stats', [DashboardController::class, 'stats'])->name('dashboard.stats')->middleware('permission:Dashboard');
 
     Route::get('/system-settings', function () {
         return view('settings.index');
@@ -72,6 +73,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/staff/login-as/{staff}', 'loginAs')->name('staff.login-as')->middleware('permission:Staff Login');
         Route::get('/staff/stop-impersonating', 'stopImpersonating')->name('staff.stop-impersonating');
         Route::get('/staff/statuses', 'getStatuses')->name('staff.statuses');
+    });
+
+    // Staff Performance
+    Route::controller(StaffPerformanceController::class)->group(function () {
+        Route::get('/staff/performance', 'dashboard')->name('staff.performance.dashboard')->middleware('permission:All Staffs');
+        Route::get('/staff/{user}/performance', 'show')->name('staff.performance.show')->middleware('permission:All Staffs');
+        Route::post('/staff/performance/assign', 'assignTarget')->name('staff.performance.assign')->middleware('permission:Save Staff');
     });
 
     // Role Management

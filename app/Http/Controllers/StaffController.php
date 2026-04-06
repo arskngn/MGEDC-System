@@ -5,7 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\GeneralSetting;
 use App\Models\Role;
 use App\Models\User;
+use App\Events\StaffCreated;
 use Illuminate\Http\Request;
+use App\Models\Sale;
+use App\Models\SaleReturn;
+use App\Models\StaffTarget;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 
@@ -52,6 +57,42 @@ class StaffController extends Controller
 
         $perPage = GeneralSetting::first()->records_per_page ?? 10;
         $staffs = $query->paginate($perPage)->withQueryString();
+
+        // Calculate performance for each staff member in the current month
+        $startDate = Carbon::now()->startOfMonth();
+        $endDate = Carbon::now()->endOfMonth();
+
+        foreach ($staffs as $staff) {
+            $grossSales = Sale::where('user_id', $staff->id)
+                ->whereBetween('sale_date', [$startDate, $endDate])
+                ->sum('receivable_amount');
+
+            $returns = SaleReturn::whereHas('sale', function($q) use ($staff) {
+                    $q->where('user_id', $staff->id);
+                })
+                ->whereBetween('return_date', [$startDate, $endDate])
+                ->sum('payable_amount');
+
+            $actualSales = max(0, (float)$grossSales - (float)$returns);
+
+            $target = StaffTarget::where('user_id', $staff->id)
+                ->where('target_type', 'monthly')
+                ->where('start_date', '<=', $endDate)
+                ->where('end_date', '>=', $startDate)
+                ->first();
+
+            $targetAmount = $target ? (float)$target->target_amount : 0;
+            $progress = $targetAmount > 0 ? ($actualSales / $targetAmount) * 100 : 0;
+
+            /** @var StaffTarget|null $target */
+            $staff->performance = (object)[
+                'target_amount' => $targetAmount,
+                'actual_sales' => (float)$actualSales,
+                'progress' => round($progress, 2),
+                'color' => $target ? $target->getStatusColor($progress) : 'gray',
+            ];
+        }
+
         $roles = Role::all();
 
         return view('staff.index', compact('staffs', 'roles'));
@@ -74,6 +115,8 @@ class StaffController extends Controller
         ]);
 
         $user->roles()->attach($request->role_id);
+
+        event(new StaffCreated($user, $request->password));
 
         return redirect()->back()->with('success', 'Staff added successfully.');
     }

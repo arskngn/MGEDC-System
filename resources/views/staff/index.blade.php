@@ -99,7 +99,7 @@
             </div>
         </div>
 
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="bg-white rounded-xl shadow-sm overflow-visible">
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="bg-[#4634ff] text-white">
@@ -113,7 +113,11 @@
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     @forelse($staffs as $index => $staff)
-                        <tr class="hover:bg-gray-50 transition-colors">
+                        <tr class="hover:bg-gray-50 transition-colors" 
+                            x-data="{ showTooltip: false, mouseX: 0, mouseY: 0 }"
+                            @mouseenter="showTooltip = true"
+                            @mouseleave="showTooltip = false"
+                            @mousemove="mouseX = $event.clientX; mouseY = $event.clientY">
                             <td class="px-6 py-4 text-sm text-gray-600">{{ $staffs->firstItem() + $index }}</td>
                             <td class="px-6 py-4 text-sm text-gray-600 font-medium">
                                 <div class="flex items-center space-x-3">
@@ -126,7 +130,62 @@
                                             </span>
                                         @endif
                                     </div>
-                                    <span class="truncate">{{ $staff->name }}</span>
+                                    <div class="relative">
+                                        <a href="{{ route('staff.performance.show', $staff->id) }}" 
+                                           class="hover:text-[#4634ff] hover:underline transition-colors decoration-2 underline-offset-4">
+                                            {{ $staff->name }}
+                                        </a>
+
+                                        <!-- Hover Tooltip/Modal -->
+                                        <div x-show="showTooltip" 
+                                             x-transition:enter="transition ease-out duration-200"
+                                             x-transition:enter-start="opacity-0 scale-95"
+                                             x-transition:enter-end="opacity-100 scale-100"
+                                             class="fixed z-[999] w-64 bg-white rounded-xl shadow-2xl border border-gray-100 p-4 pointer-events-none"
+                                             :style="'left: ' + (mouseX + 15) + 'px; top: ' + (mouseY + 15) + 'px;'">
+                                            <div class="flex flex-col items-center text-center">
+                                                <div class="h-16 w-16 rounded-full bg-[#4634ff] flex items-center justify-center overflow-hidden border-2 border-gray-50 shadow-sm mb-3">
+                                                    @if($staff->image)
+                                                        <img src="{{ asset($staff->image) }}" class="h-full w-full object-cover">
+                                                    @else
+                                                        <span class="text-xl font-extrabold text-white uppercase">
+                                                            {{ collect(explode(' ', $staff->name))->map(fn($n) => strtoupper(substr($n, 0, 1)))->take(2)->implode('') }}
+                                                        </span>
+                                                    @endif
+                                                </div>
+                                                <h4 class="font-bold text-[#0a1233] text-base">{{ $staff->name }}</h4>
+                                                <p class="text-[11px] text-gray-500 mb-3">{{ $staff->email }}</p>
+                                                
+                                                <div class="w-full grid grid-cols-2 gap-2 border-t border-gray-50 pt-3">
+                                                    <div class="flex flex-col">
+                                                        <span class="text-[9px] font-bold text-gray-400 uppercase">Target (Monthly)</span>
+                                                        <span class="text-[11px] font-bold text-gray-700">{{ formatCurrency($staff->performance->target_amount) }}</span>
+                                                    </div>
+                                                    <div class="flex flex-col border-l border-gray-50 pl-2">
+                                                        <span class="text-[9px] font-bold text-gray-400 uppercase">Actual Sales</span>
+                                                        <span class="text-[11px] font-bold text-[#0a1233]">{{ formatCurrency($staff->performance->actual_sales) }}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="mt-2 w-full">
+                                                    <div class="flex justify-between items-center mb-1">
+                                                        <span class="text-[9px] font-bold text-gray-400 uppercase">Progress</span>
+                                                        <span class="text-[10px] font-bold text-blue-600">{{ $staff->performance->progress }}%</span>
+                                                    </div>
+                                                    @php
+                                                        $barColor = match($staff->performance->color) {
+                                                            'green' => 'bg-green-500',
+                                                            'blue' => 'bg-blue-500',
+                                                            'red' => 'bg-red-500',
+                                                            default => 'bg-gray-500'
+                                                        };
+                                                    @endphp
+                                                    <div class="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden" x-data="{ p: {{ min($staff->performance->progress, 100) }} }">
+                                                        <div class="h-full rounded-full transition-all duration-500 {{ $barColor }}" x-bind:style="{ width: p + '%' }" style="width: 0%"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </td>
                             <td class="px-6 py-4 text-sm text-gray-600">{{ $staff->email }}</td>

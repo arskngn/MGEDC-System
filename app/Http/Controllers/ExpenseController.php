@@ -9,6 +9,7 @@ use App\Http\Requests\UpdateExpenseRequest;
 use App\Models\Expense;
 use App\Models\ExpenseType;
 use App\Models\GeneralSetting;
+use App\Services\ExpenseService;
 use App\Support\CsvImportReader;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,6 +20,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ExpenseController extends Controller
 {
     use ResolvesCsvUploadPath;
+
+    public function __construct(
+        protected ExpenseService $expenseService
+    ) {}
 
     public function index(Request $request): View
     {
@@ -63,13 +68,7 @@ class ExpenseController extends Controller
 
     public function store(StoreExpenseRequest $request): RedirectResponse
     {
-        $data = $request->validated();
-        Expense::create([
-            'expense_type_id' => $data['expense_type_id'],
-            'date' => $data['date'],
-            'amount' => $data['amount'],
-            'description' => $data['description'] ?? null,
-        ]);
+        $this->expenseService->createExpense($request->validated());
 
         return redirect()->route('expenses.index')->with('success', 'Expense created successfully.');
     }
@@ -97,20 +96,14 @@ class ExpenseController extends Controller
 
     public function update(UpdateExpenseRequest $request, Expense $expense): RedirectResponse
     {
-        $data = $request->validated();
-        $expense->update([
-            'expense_type_id' => $data['expense_type_id'],
-            'date' => $data['date'],
-            'amount' => $data['amount'],
-            'description' => $data['description'] ?? null,
-        ]);
+        $this->expenseService->updateExpense($expense, $request->validated());
 
         return redirect()->route('expenses.index')->with('success', 'Expense updated successfully.');
     }
 
     public function destroy(Expense $expense): RedirectResponse
     {
-        $expense->delete();
+        $this->expenseService->deleteExpense($expense);
 
         return redirect()->route('expenses.index')->with('success', 'Expense deleted successfully.');
     }

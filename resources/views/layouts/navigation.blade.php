@@ -424,6 +424,7 @@
                     <!-- Expanded Dropdown -->
                     <div x-show="!sidebarCollapsed && openDropdown === 'staff'" x-collapse class="pl-12 space-y-1">
                         <a href="{{ route('staff.index') }}" class="block py-2 text-[12px] font-medium {{ request()->routeIs('staff.index') ? 'text-[#4634ff]' : 'text-gray-400 hover:text-gray-200' }}">All Staff</a>
+                        <a href="{{ route('staff.performance.dashboard') }}" class="block py-2 text-[12px] font-medium {{ request()->routeIs('staff.performance.dashboard') ? 'text-[#4634ff]' : 'text-gray-400 hover:text-gray-200' }}">Performance</a>
                         @if(auth()->user()->hasPermission('Roles Index'))
                             <a href="{{ route('staff.roles.index') }}" class="block py-2 text-[12px] font-medium {{ request()->routeIs('staff.roles.index') ? 'text-[#4634ff]' : 'text-gray-400 hover:text-gray-200' }}">Roles</a>
                         @endif
@@ -440,6 +441,7 @@
                             <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Manage Staff</span>
                         </div>
                         <a href="{{ route('staff.index') }}" class="block px-4 py-2 text-[12px] font-medium {{ request()->routeIs('staff.index') ? 'text-[#4634ff] bg-[#1a234a]' : 'text-gray-400 hover:bg-[#1a234a] hover:text-gray-200' }}">All Staff</a>
+                        <a href="{{ route('staff.performance.dashboard') }}" class="block px-4 py-2 text-[12px] font-medium {{ request()->routeIs('staff.performance.dashboard') ? 'text-[#4634ff] bg-[#1a234a]' : 'text-gray-400 hover:bg-[#1a234a] hover:text-gray-200' }}">Performance</a>
                         @if(auth()->user()->hasPermission('Roles Index'))
                             <a href="{{ route('staff.roles.index') }}" class="block px-4 py-2 text-[12px] font-medium {{ request()->routeIs('staff.roles.index') ? 'text-[#4634ff] bg-[#1a234a]' : 'text-gray-400 hover:bg-[#1a234a] hover:text-gray-200' }}">Roles</a>
                         @endif
@@ -521,19 +523,22 @@
             @endif
         @endif
 
-        @php
-            $showReport = auth()->user()->hasPermission('Supplier Payment Report') || 
-                         auth()->user()->hasPermission('Customer Payment Report') || 
-                         auth()->user()->hasPermission('Stock Report') || 
-                         auth()->user()->hasPermission('Purchase Data Entry Report'); // Data entry start
-        @endphp
 
-        @if($showReport)
-            <div x-show="!sidebarCollapsed" class="pt-6 pb-2 px-4 text-[11px] font-bold text-gray-500 uppercase tracking-[0.2em]">
-                REPORT
-            </div>
 
-            <!-- Payment Report -->
+            <!-- Group: REPORT -->
+             @php
+                 $showReport = auth()->user()->hasPermission('Supplier Payment Report') || 
+                              auth()->user()->hasPermission('Customer Payment Report') || 
+                              auth()->user()->hasPermission('Stock Report') || 
+                              auth()->user()->hasPermission('Purchase Data Entry Report'); // Data entry start
+             @endphp
+ 
+             @if($showReport)
+                 <div x-show="!sidebarCollapsed" class="pt-6 pb-2 px-4 text-[11px] font-bold text-gray-500 uppercase tracking-[0.2em]">
+                     REPORT
+                 </div>
+  
+             <!-- Payment Report -->
             @if(auth()->user()->hasPermission('Supplier Payment Report') || auth()->user()->hasPermission('Customer Payment Report'))
                 <div class="relative">
                     <button data-dropdown-id="reports_payments" @click="if(sidebarCollapsed) { collapsedDropdown = (collapsedDropdown === 'reports_payments' ? null : 'reports_payments') } else { openDropdown = (openDropdown === 'reports_payments' ? null : 'reports_payments') }" 

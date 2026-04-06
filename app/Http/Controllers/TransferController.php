@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\Transfer;
 use App\Models\TransferItem;
 use App\Models\Warehouse;
+use App\Services\TransferService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,6 +16,10 @@ use Illuminate\View\View;
 
 class TransferController extends Controller
 {
+    public function __construct(
+        protected TransferService $transferService
+    ) {}
+
     public function index(Request $request): View
     {
         $perPage = GeneralSetting::first()?->records_per_page ?? 15;
@@ -49,7 +54,7 @@ class TransferController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'tracking_no' => 'required|string',
             'from_warehouse_id' => 'required|integer|exists:warehouses,id',
             'to_warehouse_id' => 'required|integer|exists:warehouses,id|different:from_warehouse_id',
@@ -60,30 +65,7 @@ class TransferController extends Controller
             'items.*.quantity' => 'required|numeric|min:0.01',
         ]);
 
-        DB::transaction(function () use ($request) {
-            $transfer = Transfer::create([
-                'tracking_no' => $request->input('tracking_no'),
-                'from_warehouse_id' => $request->input('from_warehouse_id'),
-                'to_warehouse_id' => $request->input('to_warehouse_id'),
-                'transfer_date' => $request->input('transfer_date'),
-                'note' => $request->input('note') ?? null,
-            ]);
-
-            foreach ($request->input('items') as $item) {
-                $product = Product::find($item['product_id']);
-                if (!$product) continue;
-
-                TransferItem::create([
-                    'transfer_id' => $transfer->id,
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'sku' => $product->sku,
-                    'unit_label' => $product->unit?->short_name ?? $product->unit?->name,
-                    'quantity' => $item['quantity'],
-                    'from_stock' => $product->current_stock,
-                ]);
-            }
-        });
+        $this->transferService->createTransfer($validated);
 
         return redirect()->route('transfers.index')->with('success', 'Transfer created successfully.');
     }
@@ -100,7 +82,7 @@ class TransferController extends Controller
 
     public function update(Request $request, Transfer $transfer): RedirectResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'tracking_no' => 'required|string',
             'from_warehouse_id' => 'required|integer|exists:warehouses,id',
             'to_warehouse_id' => 'required|integer|exists:warehouses,id|different:from_warehouse_id',
@@ -111,42 +93,14 @@ class TransferController extends Controller
             'items.*.quantity' => 'required|numeric|min:0.01',
         ]);
 
-        DB::transaction(function () use ($request, $transfer) {
-            $transfer->update([
-                'tracking_no' => $request->input('tracking_no'),
-                'from_warehouse_id' => $request->input('from_warehouse_id'),
-                'to_warehouse_id' => $request->input('to_warehouse_id'),
-                'transfer_date' => $request->input('transfer_date'),
-                'note' => $request->input('note') ?? null,
-            ]);
-
-            $transfer->items()->delete();
-
-            foreach ($request->input('items') as $item) {
-                $product = Product::find($item['product_id']);
-                if (!$product) continue;
-
-                TransferItem::create([
-                    'transfer_id' => $transfer->id,
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'sku' => $product->sku,
-                    'unit_label' => $product->unit?->short_name ?? $product->unit?->name,
-                    'quantity' => $item['quantity'],
-                    'from_stock' => $product->current_stock,
-                ]);
-            }
-        });
+        $this->transferService->updateTransfer($transfer, $validated);
 
         return redirect()->route('transfers.index')->with('success', 'Transfer updated successfully.');
     }
 
     public function destroy(Transfer $transfer): RedirectResponse
     {
-        DB::transaction(function () use ($transfer) {
-            $transfer->items()->delete();
-            $transfer->delete();
-        });
+        $this->transferService->deleteTransfer($transfer);
 
         return redirect()->route('transfers.index')->with('success', 'Transfer deleted successfully.');
     }

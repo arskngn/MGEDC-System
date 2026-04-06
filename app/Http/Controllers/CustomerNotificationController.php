@@ -6,11 +6,17 @@ use App\Models\Customer;
 use App\Models\GeneralSetting;
 use App\Models\NotificationLog;
 use App\Models\NotificationSetting;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 
 class CustomerNotificationController extends NotificationSettingController
 {
+    public function __construct(NotificationService $notificationService)
+    {
+        parent::__construct($notificationService);
+    }
+
     public function singleForm(Customer $customer)
     {
         return view('customers.notifications.single', [

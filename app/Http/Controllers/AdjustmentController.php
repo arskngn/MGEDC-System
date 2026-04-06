@@ -9,6 +9,7 @@ use App\Models\AdjustmentItem;
 use App\Models\GeneralSetting;
 use App\Models\Product;
 use App\Models\Warehouse;
+use App\Services\AdjustmentService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,10 @@ use Illuminate\View\View;
 
 class AdjustmentController extends Controller
 {
+    public function __construct(
+        protected AdjustmentService $adjustmentService
+    ) {}
+
     public function index(Request $request): View
     {
         $perPage = GeneralSetting::first()?->records_per_page ?? 15;
@@ -51,29 +56,7 @@ class AdjustmentController extends Controller
 
     public function store(StoreAdjustmentRequest $request): RedirectResponse
     {
-        DB::transaction(function () use ($request) {
-            $adjustment = Adjustment::create([
-                'tracking_no' => $request->validated()['tracking_no'],
-                'warehouse_id' => $request->validated()['warehouse_id'],
-                'adjustment_date' => $request->validated()['adjustment_date'],
-                'note' => $request->validated()['note'] ?? null,
-            ]);
-
-            foreach ($request->validated()['items'] as $item) {
-                $product = Product::find($item['product_id']);
-                if (!$product) continue;
-
-                AdjustmentItem::create([
-                    'adjustment_id' => $adjustment->id,
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'sku' => $product->sku,
-                    'quantity' => $item['quantity'],
-                    'unit_label' => $product->unit?->short_name ?? $product->unit?->name,
-                    'type' => $item['type'],
-                ]);
-            }
-        });
+        $this->adjustmentService->createAdjustment($request->validated());
 
         return redirect()->route('adjustments.index')->with('success', 'Adjustment created successfully.');
     }
@@ -90,43 +73,14 @@ class AdjustmentController extends Controller
 
     public function update(UpdateAdjustmentRequest $request, Adjustment $adjustment): RedirectResponse
     {
-        DB::transaction(function () use ($request, $adjustment) {
-            $adjustment->update([
-                'tracking_no' => $request->validated()['tracking_no'],
-                'warehouse_id' => $request->validated()['warehouse_id'],
-                'adjustment_date' => $request->validated()['adjustment_date'],
-                'note' => $request->validated()['note'] ?? null,
-            ]);
-
-            // Delete existing items
-            $adjustment->items()->delete();
-
-            // Create new items
-            foreach ($request->validated()['items'] as $item) {
-                $product = Product::find($item['product_id']);
-                if (!$product) continue;
-
-                AdjustmentItem::create([
-                    'adjustment_id' => $adjustment->id,
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'sku' => $product->sku,
-                    'quantity' => $item['quantity'],
-                    'unit_label' => $product->unit?->short_name ?? $product->unit?->name,
-                    'type' => $item['type'],
-                ]);
-            }
-        });
+        $this->adjustmentService->updateAdjustment($adjustment, $request->validated());
 
         return redirect()->route('adjustments.index')->with('success', 'Adjustment updated successfully.');
     }
 
     public function destroy(Adjustment $adjustment): RedirectResponse
     {
-        DB::transaction(function () use ($adjustment) {
-            $adjustment->items()->delete();
-            $adjustment->delete();
-        });
+        $this->adjustmentService->deleteAdjustment($adjustment);
 
         return redirect()->route('adjustments.index')->with('success', 'Adjustment deleted successfully.');
     }

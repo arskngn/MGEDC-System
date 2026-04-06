@@ -55,5 +55,16 @@ class SaleReturn extends Model
     {
         return max(0, (float) $this->payable_amount - (float) $this->paid_amount);
     }
+
+    public static function nextReturnNo(): string
+    {
+        $max = static::query()
+            ->where('return_invoice_no', 'like', 'SR-%')
+            ->get()
+            ->map(fn ($r) => (int) preg_replace('/\D/', '', substr($r->return_invoice_no, 3)))
+            ->max() ?? 0;
+
+        return 'SR-'.str_pad((string) ($max + 1), 6, '0', STR_PAD_LEFT);
+    }
 }
 

@@ -9,6 +9,8 @@
         "php": "^8.3",
         "barryvdh/laravel-dompdf": "*",
         "laravel/framework": "^13.0",
+        "laravel/reverb": "^1.10",
+        "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
         "predis/predis": "^3.4",
         "twilio/sdk": "^8.11",
@@ -39,34 +41,28 @@
         }
     },
     "scripts": {
+        "setup": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
+            "composer install",
+            "@php artisan key:generate --ansi",
+            "@php artisan storage:link --ansi",
+            "@dompdf-setup",
+            "npm install",
+            "npm run build",
+            "@php artisan migrate --ansi",
+            "@php artisan tinker --execute \"try { Cache::store('redis')->put('setup_test', 'working', 10); echo 'Redis Status: Nagana boss haha' . PHP_EOL; } catch (\\Exception $e) { echo 'Redis Status: Not configured or not running' . PHP_EOL; }\""
+        ],
         "dompdf-setup": [
             "@php -r \"is_dir('storage/fonts') || mkdir('storage/fonts', 0755, true);\"",
             "@php artisan vendor:publish --provider=\"Barryvdh\\DomPDF\\ServiceProvider\" --tag=config --ansi"
         ],
-        "download-all": [
-            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
-            "composer install",
-            "@dompdf-setup",
-            "@php artisan key:generate",
-            "composer require predis/predis",
-            "@php artisan tinker --execute \"Cache::store('redis')->put('test_key', 'test_value', 60); echo 'Nagana boss haha'; echo PHP_EOL; echo Cache::store('redis')->get('test_y');\"",
-            "composer require vonage/client twilio/sdk -W",
-            "composer require laravel/breeze --dev",
-            "npm install",
-            "@php artisan breeze:install blade --no-interaction"
-        ],
-        "setup": [
-            "composer install",
-            "@dompdf-setup",
-            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
-            "@php artisan key:generate",
-            "@php artisan migrate --force",
-            "npm install",
-            "npm run build"
-        ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,queue,logs,vite --kill-others"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74,#818cf8\" \"php artisan serve\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm run dev\" \"php artisan reverb:start\" --names=server,queue,logs,vite,reverb --kill-others"
+        ],
+        "tabs": [
+            "Composer\\Config::disableProcessTimeout",
+            "wt -w 0 nt -d . --title \"Vite\" powershell -NoExit -Command \"npm run dev\" ; nt -d . --title \"Server\" powershell -NoExit -Command \"php artisan serve\" ; nt -d . --title \"Reverb\" powershell -NoExit -Command \"php artisan reverb:start\""
         ],
         "test": [
             "@php artisan config:clear --ansi",

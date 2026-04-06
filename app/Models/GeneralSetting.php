@@ -33,7 +33,7 @@ class GeneralSetting extends Model
      */
     public function getLogoLightAttribute($value)
     {
-        if ($value && File::exists(public_path($value))) {
+        if ($value && File::exists(public_path(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $value)))) {
             return $value;
         }
 
@@ -45,7 +45,7 @@ class GeneralSetting extends Model
      */
     public function getLogoDarkAttribute($value)
     {
-        if ($value && File::exists(public_path($value))) {
+        if ($value && File::exists(public_path(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $value)))) {
             return $value;
         }
 
@@ -57,7 +57,7 @@ class GeneralSetting extends Model
      */
     public function getFaviconAttribute($value)
     {
-        if ($value && File::exists(public_path($value))) {
+        if ($value && File::exists(public_path(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $value)))) {
             return $value;
         }
 
@@ -69,7 +69,7 @@ class GeneralSetting extends Model
      */
     public function getLoginBackgroundAttribute($value)
     {
-        if ($value && File::exists(public_path($value))) {
+        if ($value && File::exists(public_path(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $value)))) {
             return $value;
         }
 

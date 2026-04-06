@@ -1,5 +1,13 @@
 <x-app-layout>
-    <div class="space-y-8">
+    <div x-data="dashboard({
+        summary: {{ json_encode($summary) }},
+        transactions: {{ json_encode($transactions) }},
+        settings: {
+            currency_symbol: '{{ $settings->currency_symbol ?? '$' }}',
+            currency: '{{ $settings->currency ?? 'USD' }}',
+            currency_format: '{{ $settings->currency_format ?? 'both' }}'
+        }
+    })" class="space-y-8">
         <div>
             <h2 class="text-2xl font-bold text-gray-800">Dashboard</h2>
         </div>
@@ -15,7 +23,7 @@
                 </div>
                 <div class="ml-5 flex-1">
                     <div class="text-[13px] font-bold text-[#0a1233] opacity-80">Total Products</div>
-                    <div class="text-2xl font-extrabold text-[#0a1233] mt-1">15</div>
+                    <div class="text-2xl font-extrabold text-[#0a1233] mt-1" x-text="summary.total_products"></div>
                 </div>
                 <div class="ml-auto">
                     <svg class="h-5 w-5 text-gray-400 group-hover:text-[#4634ff] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -33,7 +41,7 @@
                 </div>
                 <div class="ml-5 flex-1">
                     <div class="text-[13px] font-bold text-[#0a1233] opacity-80">Total Customers</div>
-                    <div class="text-2xl font-extrabold text-[#0a1233] mt-1">13</div>
+                    <div class="text-2xl font-extrabold text-[#0a1233] mt-1" x-text="summary.total_customers"></div>
                 </div>
                 <div class="ml-auto">
                     <svg class="h-5 w-5 text-gray-400 group-hover:text-[#4634ff] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -51,7 +59,7 @@
                 </div>
                 <div class="ml-5 flex-1">
                     <div class="text-[13px] font-bold text-[#0a1233] opacity-80">Total Suppliers</div>
-                    <div class="text-2xl font-extrabold text-[#0a1233] mt-1">13</div>
+                    <div class="text-2xl font-extrabold text-[#0a1233] mt-1" x-text="summary.total_suppliers"></div>
                 </div>
                 <div class="ml-auto">
                     <svg class="h-5 w-5 text-gray-400 group-hover:text-[#4634ff] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -69,7 +77,7 @@
                 </div>
                 <div class="ml-5 flex-1">
                     <div class="text-[13px] font-bold text-[#0a1233] opacity-80">Total Categories</div>
-                    <div class="text-2xl font-extrabold text-[#0a1233] mt-1">9</div>
+                    <div class="text-2xl font-extrabold text-[#0a1233] mt-1" x-text="summary.total_categories"></div>
                 </div>
                 <div class="ml-auto">
                     <svg class="h-5 w-5 text-gray-400 group-hover:text-[#4634ff] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -92,7 +100,7 @@
                             </svg>
                         </div>
                         <div>
-                            <div class="text-xl font-bold">17</div>
+                            <div class="text-xl font-bold" x-text="transactions.sales.count"></div>
                             <div class="text-xs text-gray-500">Total Sales</div>
                         </div>
                         <svg class="h-4 w-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -106,7 +114,7 @@
                             </svg>
                         </div>
                         <div>
-                            <div class="text-sm font-bold">{{ formatCurrency(637825750) }}</div>
+                            <div class="text-sm font-bold" x-text="formatCurrency(transactions.sales.total_amount)"></div>
                             <div class="text-xs text-gray-500">Total Sales Amount</div>
                         </div>
                         <svg class="h-4 w-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -120,7 +128,7 @@
                             </svg>
                         </div>
                         <div>
-                            <div class="text-xl font-bold">7</div>
+                            <div class="text-xl font-bold" x-text="transactions.sale_returns.count"></div>
                             <div class="text-xs text-gray-500">Total Sales Return</div>
                         </div>
                         <svg class="h-4 w-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -134,7 +142,7 @@
                             </svg>
                         </div>
                         <div>
-                            <div class="text-sm font-bold">{{ formatCurrency(99025000) }}</div>
+                            <div class="text-sm font-bold" x-text="formatCurrency(transactions.sale_returns.total_amount)"></div>
                             <div class="text-xs text-gray-500">Total Sales Return Amount</div>
                         </div>
                         <svg class="h-4 w-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -155,7 +163,7 @@
                             </svg>
                         </div>
                         <div>
-                            <div class="text-xl font-bold">19</div>
+                            <div class="text-xl font-bold" x-text="transactions.purchases.count"></div>
                             <div class="text-xs text-gray-500">Total Purchases</div>
                         </div>
                         <svg class="h-4 w-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -169,7 +177,7 @@
                             </svg>
                         </div>
                         <div>
-                            <div class="text-sm font-bold">{{ formatCurrency(1202723310) }}</div>
+                            <div class="text-sm font-bold" x-text="formatCurrency(transactions.purchases.total_amount)"></div>
                             <div class="text-xs text-gray-500">Total Purchases Amount</div>
                         </div>
                         <svg class="h-4 w-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -183,7 +191,7 @@
                             </svg>
                         </div>
                         <div>
-                            <div class="text-xl font-bold">7</div>
+                            <div class="text-xl font-bold" x-text="transactions.purchase_returns.count"></div>
                             <div class="text-xs text-gray-500">Total Purchases Return</div>
                         </div>
                         <svg class="h-4 w-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -197,7 +205,7 @@
                             </svg>
                         </div>
                         <div>
-                            <div class="text-sm font-bold">{{ formatCurrency(247662300) }}</div>
+                            <div class="text-sm font-bold" x-text="formatCurrency(transactions.purchase_returns.total_amount)"></div>
                             <div class="text-xs text-gray-500">Total Purchases Return Amount</div>
                         </div>
                         <svg class="h-4 w-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -240,4 +248,67 @@
             </div>
         </div>
     </div>
+
+    @push('scripts')
+    <script>
+        function dashboard(initialData) {
+            return {
+                summary: initialData.summary,
+                transactions: initialData.transactions,
+                settings: initialData.settings,
+
+                init() {
+                    if (window.Echo) {
+                        window.Echo.channel('sales')
+                            .listen('SaleCreated', (e) => {
+                                console.log('Sale Created:', e);
+                                this.refreshStats();
+                            })
+                            .listen('SaleReturnCreated', (e) => {
+                                console.log('Sale Return Created:', e);
+                                this.refreshStats();
+                            })
+                            .listen('PurchaseCreated', (e) => {
+                                console.log('Purchase Created:', e);
+                                this.refreshStats();
+                            })
+                            .listen('PurchaseReturnCreated', (e) => {
+                                console.log('Purchase Return Created:', e);
+                                this.refreshStats();
+                            });
+                    }
+                },
+
+                async refreshStats() {
+                    try {
+                        const response = await axios.get("{{ route('dashboard.stats') }}");
+                        this.summary = response.data.summary;
+                        this.transactions = response.data.transactions;
+                    } catch (error) {
+                        console.error('Failed to refresh stats:', error);
+                    }
+                },
+
+                formatCurrency(amount) {
+                    const formatted = new Intl.NumberFormat('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }).format(amount);
+
+                    const { currency_symbol, currency, currency_format } = this.settings;
+
+                    switch (currency_format) {
+                        case 'symbol':
+                            return currency_symbol + formatted;
+                        case 'text':
+                            return formatted + ' ' + currency;
+                        case 'both':
+                        default:
+                            return currency_symbol + formatted + ' ' + currency;
+                    }
+                }
+            }
+        }
+    </script>
+    @endpush
 </x-app-layout>

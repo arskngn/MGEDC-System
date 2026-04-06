@@ -11,6 +11,7 @@ use App\Models\PurchaseItem;
 use App\Models\PurchaseReturn;
 use App\Models\PurchaseReturnItem;
 use App\Models\PurchaseReturnPayment;
+use App\Services\PurchaseReturnService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PurchaseReturnController extends Controller
 {
+    public function __construct(
+        protected PurchaseReturnService $purchaseReturnService
+    ) {}
+
     public function index(Request $request): View
     {
         $perPage = GeneralSetting::first()?->records_per_page ?? 15;
@@ -91,46 +96,13 @@ class PurchaseReturnController extends Controller
     public function store(StorePurchaseReturnRequest $request, Purchase $purchase): RedirectResponse
     {
         $discount = round((float) $request->validated()['discount'], 2);
-        $data = $this->buildTotalsFromItems(
-            $purchase,
-            $request->validated()['items'],
-            $discount,
-            null
-        );
+        $totals = $this->purchaseReturnService->calculateTotals($purchase, $request->validated()['items'], $discount);
 
-        if ($data['receivable'] < 0) {
+        if ($totals['receivable'] < 0) {
             return back()->withInput()->withErrors(['discount' => 'Discount cannot exceed subtotal.']);
         }
 
-        DB::transaction(function () use ($request, $purchase, $data) {
-            $ret = PurchaseReturn::create([
-                'purchase_id' => $purchase->id,
-                'return_invoice_no' => PurchaseReturn::nextInvoiceNo(),
-                'return_date' => $request->validated()['return_date'],
-                'warehouse_id' => $purchase->warehouse_id,
-                'subtotal' => $data['subtotal'],
-                'discount' => $data['discount'],
-                'receivable_amount' => $data['receivable'],
-                'received_amount' => 0,
-                'note' => $request->validated()['note'] ?? null,
-            ]);
-
-            foreach ($data['lines'] as $line) {
-                PurchaseReturnItem::create([
-                    'purchase_return_id' => $ret->id,
-                    'purchase_item_id' => $line['purchase_item_id'],
-                    'product_id' => $line['product_id'],
-                    'product_name' => $line['product_name'],
-                    'sku' => $line['sku'],
-                    'purchase_quantity' => $line['purchase_quantity'],
-                    'stock_quantity' => $line['stock_quantity'],
-                    'return_quantity' => $line['return_quantity'],
-                    'unit_label' => $line['unit_label'],
-                    'unit_price' => $line['unit_price'],
-                    'line_total' => $line['line_total'],
-                ]);
-            }
-        });
+        $this->purchaseReturnService->createReturn($purchase, $request->validated());
 
         return redirect()->route('purchases.return')->with('success', 'Purchase return created successfully.');
     }
@@ -167,48 +139,17 @@ class PurchaseReturnController extends Controller
     {
         $purchase = $purchaseReturn->purchase;
         $discount = round((float) $request->validated()['discount'], 2);
-        $data = $this->buildTotalsFromItems(
-            $purchase,
-            $request->validated()['items'],
-            $discount,
-            $purchaseReturn->id
-        );
+        $totals = $this->purchaseReturnService->calculateTotals($purchase, $request->validated()['items'], $discount, $purchaseReturn->id);
 
-        if ($data['receivable'] < 0) {
+        if ($totals['receivable'] < 0) {
             return back()->withInput()->withErrors(['discount' => 'Discount cannot exceed subtotal.']);
         }
 
-        if ($data['receivable'] < (float) $purchaseReturn->received_amount - 0.0001) {
+        if ($totals['receivable'] < (float) $purchaseReturn->received_amount - 0.0001) {
             return back()->withInput()->withErrors(['discount' => 'Receivable cannot be less than amount already received.']);
         }
 
-        DB::transaction(function () use ($request, $purchaseReturn, $data) {
-            $purchaseReturn->items()->delete();
-
-            $purchaseReturn->update([
-                'return_date' => $request->validated()['return_date'],
-                'subtotal' => $data['subtotal'],
-                'discount' => $data['discount'],
-                'receivable_amount' => $data['receivable'],
-                'note' => $request->validated()['note'] ?? null,
-            ]);
-
-            foreach ($data['lines'] as $line) {
-                PurchaseReturnItem::create([
-                    'purchase_return_id' => $purchaseReturn->id,
-                    'purchase_item_id' => $line['purchase_item_id'],
-                    'product_id' => $line['product_id'],
-                    'product_name' => $line['product_name'],
-                    'sku' => $line['sku'],
-                    'purchase_quantity' => $line['purchase_quantity'],
-                    'stock_quantity' => $line['stock_quantity'],
-                    'return_quantity' => $line['return_quantity'],
-                    'unit_label' => $line['unit_label'],
-                    'unit_price' => $line['unit_price'],
-                    'line_total' => $line['line_total'],
-                ]);
-            }
-        });
+        $this->purchaseReturnService->updateReturn($purchaseReturn, $request->validated());
 
         return redirect()->route('purchases.return')->with('success', 'Purchase return updated successfully.');
     }
@@ -221,15 +162,7 @@ class PurchaseReturnController extends Controller
             return back()->withErrors(['receiving_amount' => 'Amount cannot exceed the due balance.']);
         }
 
-        DB::transaction(function () use ($purchaseReturn, $recv, $request) {
-            PurchaseReturnPayment::create([
-                'purchase_return_id' => $purchaseReturn->id,
-                'user_id' => $request->user()?->id,
-                'amount' => $recv,
-                'paid_at' => now(),
-            ]);
-            $purchaseReturn->increment('received_amount', $recv);
-        });
+        $this->purchaseReturnService->recordPayment($purchaseReturn, $recv, $request->user()?->id);
 
         return back()->with('success', 'Payment recorded successfully.');
     }
@@ -300,53 +233,6 @@ class PurchaseReturnController extends Controller
         ])->setPaper('a4', 'portrait');
 
         return $pdf->download('purchase-return-'.$purchaseReturn->return_invoice_no.'.pdf');
-    }
-
-    /**
-     * @param  array<int, array{purchase_item_id: int, return_quantity: float|int|string}>  $itemsInput
-     * @return array{subtotal: float, discount: float, receivable: float, lines: list<array<string, mixed>>}
-     */
-    private function buildTotalsFromItems(Purchase $purchase, array $itemsInput, float $discount, ?int $excludeReturnId): array
-    {
-        $subtotal = 0;
-        $lines = [];
-
-        foreach ($itemsInput as $row) {
-            $rq = (float) ($row['return_quantity'] ?? 0);
-            if ($rq <= 0) {
-                continue;
-            }
-
-            $line = PurchaseItem::where('purchase_id', $purchase->id)->findOrFail($row['purchase_item_id']);
-            $unitPrice = (float) $line->unit_price;
-            $lineTotal = round($rq * $unitPrice, 2);
-            $subtotal += $lineTotal;
-
-            $stockQty = PurchaseReturn::remainingReturnableForPurchaseItem($line, $excludeReturnId);
-
-            $lines[] = [
-                'purchase_item_id' => $line->id,
-                'product_id' => $line->product_id,
-                'product_name' => $line->product_name,
-                'sku' => $line->sku,
-                'purchase_quantity' => (float) $line->quantity,
-                'stock_quantity' => $stockQty,
-                'return_quantity' => $rq,
-                'unit_label' => $line->unit_label,
-                'unit_price' => $unitPrice,
-                'line_total' => $lineTotal,
-            ];
-        }
-
-        $discount = round($discount, 2);
-        $receivable = round(max(0, $subtotal - $discount), 2);
-
-        return [
-            'subtotal' => round($subtotal, 2),
-            'discount' => $discount,
-            'receivable' => $receivable,
-            'lines' => $lines,
-        ];
     }
 
     private function filteredReturnsQuery(Request $request)

@@ -12,6 +12,7 @@ use App\Models\PurchaseItem;
 use App\Models\PurchasePayment;
 use App\Models\Supplier;
 use App\Models\Warehouse;
+use App\Services\PurchaseService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PurchaseController extends Controller
 {
+    public function __construct(
+        protected PurchaseService $purchaseService
+    ) {}
+
     public function index(Request $request): View
     {
         $perPage = GeneralSetting::first()?->records_per_page ?? 15;
@@ -63,37 +68,13 @@ class PurchaseController extends Controller
 
     public function store(StorePurchaseRequest $request): RedirectResponse
     {
-        $data = $this->buildTotalsFromItems($request->validated()['items'], (float) $request->validated()['discount']);
-        if ($data['payable'] < 0) {
+        $totals = $this->purchaseService->calculateTotals($request->validated()['items'], (float) $request->validated()['discount']);
+        
+        if ($totals['payable'] < 0) {
             return back()->withInput()->withErrors(['discount' => 'Discount cannot exceed subtotal.']);
         }
 
-        DB::transaction(function () use ($request, $data) {
-            $purchase = Purchase::create([
-                'invoice_no' => $request->validated()['invoice_no'],
-                'supplier_id' => $request->validated()['supplier_id'],
-                'warehouse_id' => $request->validated()['warehouse_id'],
-                'purchase_date' => $request->validated()['purchase_date'],
-                'note' => $request->validated()['note'] ?? null,
-                'subtotal' => $data['subtotal'],
-                'discount' => $data['discount'],
-                'payable_amount' => $data['payable'],
-                'paid_amount' => 0,
-            ]);
-
-            foreach ($data['lines'] as $line) {
-                PurchaseItem::create([
-                    'purchase_id' => $purchase->id,
-                    'product_id' => $line['product_id'],
-                    'product_name' => $line['product_name'],
-                    'sku' => $line['sku'],
-                    'quantity' => $line['quantity'],
-                    'unit_label' => $line['unit_label'],
-                    'unit_price' => $line['unit_price'],
-                    'line_total' => $line['line_total'],
-                ]);
-            }
-        });
+        $this->purchaseService->createPurchase($request->validated());
 
         return redirect()->route('purchases.all')->with('success', 'Purchase created successfully.');
     }
@@ -122,42 +103,17 @@ class PurchaseController extends Controller
             return back()->with('error', 'You cannot edit a purchase after a return has been recorded.');
         }
 
-        $data = $this->buildTotalsFromItems($request->validated()['items'], (float) $request->validated()['discount']);
-        if ($data['payable'] < 0) {
+        $totals = $this->purchaseService->calculateTotals($request->validated()['items'], (float) $request->validated()['discount']);
+        
+        if ($totals['payable'] < 0) {
             return back()->withInput()->withErrors(['discount' => 'Discount cannot exceed subtotal.']);
         }
 
-        if ($data['payable'] < (float) $purchase->paid_amount - 0.0001) {
+        if ($totals['payable'] < (float) $purchase->paid_amount - 0.0001) {
             return back()->withInput()->withErrors(['discount' => 'Payable cannot be less than amount already paid.']);
         }
 
-        DB::transaction(function () use ($request, $purchase, $data) {
-            $purchase->items()->delete();
-
-            $purchase->update([
-                'invoice_no' => $request->validated()['invoice_no'],
-                'supplier_id' => $request->validated()['supplier_id'],
-                'warehouse_id' => $request->validated()['warehouse_id'],
-                'purchase_date' => $request->validated()['purchase_date'],
-                'note' => $request->validated()['note'] ?? null,
-                'subtotal' => $data['subtotal'],
-                'discount' => $data['discount'],
-                'payable_amount' => $data['payable'],
-            ]);
-
-            foreach ($data['lines'] as $line) {
-                PurchaseItem::create([
-                    'purchase_id' => $purchase->id,
-                    'product_id' => $line['product_id'],
-                    'product_name' => $line['product_name'],
-                    'sku' => $line['sku'],
-                    'quantity' => $line['quantity'],
-                    'unit_label' => $line['unit_label'],
-                    'unit_price' => $line['unit_price'],
-                    'line_total' => $line['line_total'],
-                ]);
-            }
-        });
+        $this->purchaseService->updatePurchase($purchase, $request->validated());
 
         return redirect()->route('purchases.all')->with('success', 'Purchase updated successfully.');
     }
@@ -170,14 +126,7 @@ class PurchaseController extends Controller
             return back()->withErrors(['paying_amount' => 'Amount cannot exceed the due balance.']);
         }
 
-        DB::transaction(function () use ($purchase, $paying, $request) {
-            PurchasePayment::create([
-                'purchase_id' => $purchase->id,
-                'user_id' => $request->user()?->id,
-                'amount' => $paying,
-            ]);
-            $purchase->increment('paid_amount', $paying);
-        });
+        $this->purchaseService->recordPayment($purchase, $paying, $request->user()?->id);
 
         return back()->with('success', 'Payment recorded successfully.');
     }
@@ -276,44 +225,6 @@ class PurchaseController extends Controller
         ])->setPaper('a4', 'portrait');
 
         return $pdf->download('purchase-'.$purchase->invoice_no.'.pdf');
-    }
-
-    /**
-     * @param  array<int, array{product_id: int, quantity: float|int|string, unit_price: float|int|string}>  $items
-     * @return array{subtotal: float, discount: float, payable: float, lines: list<array<string, mixed>>}
-     */
-    private function buildTotalsFromItems(array $items, float $discount): array
-    {
-        $subtotal = 0;
-        $lines = [];
-
-        foreach ($items as $row) {
-            $product = Product::with('unit')->findOrFail($row['product_id']);
-            $qty = (float) $row['quantity'];
-            $price = (float) $row['unit_price'];
-            $lineTotal = round($qty * $price, 2);
-            $subtotal += $lineTotal;
-
-            $lines[] = [
-                'product_id' => $product->id,
-                'product_name' => $product->name,
-                'sku' => $product->sku,
-                'quantity' => $qty,
-                'unit_label' => $product->unit->short_name ?? $product->unit->name,
-                'unit_price' => $price,
-                'line_total' => $lineTotal,
-            ];
-        }
-
-        $discount = round($discount, 2);
-        $payable = round(max(0, $subtotal - $discount), 2);
-
-        return [
-            'subtotal' => round($subtotal, 2),
-            'discount' => $discount,
-            'payable' => $payable,
-            'lines' => $lines,
-        ];
     }
 
     private function filteredPurchasesQuery(Request $request)

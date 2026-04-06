@@ -12,9 +12,10 @@ class AdjustmentItem extends Model
         'product_id',
         'product_name',
         'sku',
-        'quantity',
-        'unit_label',
+        'current_stock',
+        'adjust_qty',
         'type',
+        'unit_label',
     ];
 
     public function adjustment(): BelongsTo
