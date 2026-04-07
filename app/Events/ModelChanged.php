@@ -14,7 +14,8 @@ class ModelChanged
     public function __construct(
         public string $action,
         public Model $model,
-        public ?array $changes = null
+        public ?array $changes = null,
+        public ?int $userId = null
     ) {
     }
 }

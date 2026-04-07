@@ -5,11 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * @property int $id
  * @property int $customer_id
  * @property int $warehouse_id
+ * @property int $user_id
  * @property string $invoice_no
  * @property \Carbon\Carbon $sale_date
  * @property string|null $note
@@ -21,11 +23,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property \Carbon\Carbon|null $updated_at
  * @property-read Customer $customer
  * @property-read Warehouse $warehouse
+ * @property-read User $user
  * @property-read \Illuminate\Database\Eloquent\Collection|SaleItem[] $items
  * @property-read float $due_amount
  */
 class Sale extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'customer_id',
         'warehouse_id',
@@ -92,11 +97,12 @@ class Sale extends Model
 
     public static function nextInvoiceNo(): string
     {
+        // Use database-level locking to prevent race conditions
         $max = static::query()
             ->where('invoice_no', 'like', 'S-%')
-            ->get()
-            ->map(fn ($s) => (int) preg_replace('/\D/', '', substr($s->invoice_no, 2)))
-            ->max() ?? 0;
+            ->lockForUpdate()
+            ->latest('id')
+            ->value(\DB::raw("CAST(SUBSTRING(invoice_no, 3) AS UNSIGNED)")) ?? 0;
 
         return 'S-'.str_pad((string) ($max + 1), 6, '0', STR_PAD_LEFT);
     }

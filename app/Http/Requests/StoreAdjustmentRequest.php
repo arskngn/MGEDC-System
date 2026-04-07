@@ -21,6 +21,7 @@ class StoreAdjustmentRequest extends FormRequest
             'note' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'exists:products,id'],
+            'items.*.product_batch_id' => ['nullable', 'exists:product_batches,id'],
             'items.*.quantity' => ['required', 'numeric'],
             'items.*.type' => ['required', 'in:Added,Removed'],
         ];

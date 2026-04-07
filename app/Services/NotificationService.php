@@ -11,13 +11,14 @@ use App\Models\NotificationLog;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class NotificationService
 {
     /**
-     * Send a notification to a customer.
+     * Send a notification to a recipient (User or Customer).
      */
-    public function sendToCustomer(Customer $customer, string $templateSlug, array $data = [], ?User $sender = null): bool
+    public function send(User|Customer $recipient, string $templateSlug, array $data = [], ?User $sender = null): bool
     {
         $setting = NotificationSetting::first();
         if (!$setting) {
@@ -35,14 +36,14 @@ class NotificationService
         $channels = [];
 
         // Email
-        if ($template->is_email_enabled && $customer->email) {
+        if ($template->is_email_enabled && $recipient->email) {
             try {
                 $this->setMailConfig($setting);
-                $subject = $this->replacePlaceholders($template->subject ?? 'Notification', $customer, $data, $sender, $generalSetting);
-                $body = $this->replacePlaceholders($template->email_body ?? '', $customer, $data, $sender, $generalSetting);
+                $subject = $this->replacePlaceholders($template->subject ?? 'Notification', $recipient, $data, $sender, $generalSetting);
+                $body = $this->replacePlaceholders($template->email_body ?? '', $recipient, $data, $sender, $generalSetting);
 
-                Mail::html($body, function ($mail) use ($customer, $template, $setting, $subject) {
-                    $mail->to($customer->email)
+                Mail::html($body, function ($mail) use ($recipient, $template, $setting, $subject) {
+                    $mail->to($recipient->email)
                         ->subject($subject)
                         ->from(
                             $template->email_sent_from_email ?? $setting->email_sent_from_email,
@@ -51,29 +52,38 @@ class NotificationService
                 });
                 $channels[] = 'email';
             } catch (\Exception $e) {
-                Log::error("Failed to send email to {$customer->email}: " . $e->getMessage());
+                Log::error("Failed to send email to {$recipient->email}: " . $e->getMessage());
             }
         }
 
         // SMS
-        if ($template->is_sms_enabled && $customer->phone) {
+        if ($template->is_sms_enabled && property_exists($recipient, 'phone') && $recipient->phone) {
             try {
-                $smsBody = $this->replacePlaceholders($template->sms_body ?? '', $customer, $data, $sender, $generalSetting);
-                $this->sendSms($setting, $customer->phone, $smsBody, $template->sms_sent_from);
+                $smsBody = $this->replacePlaceholders($template->sms_body ?? '', $recipient, $data, $sender, $generalSetting);
+                $this->sendSms($setting, $recipient->phone, $smsBody, $template->sms_sent_from);
                 $channels[] = 'sms';
             } catch (\Exception $e) {
-                Log::error("Failed to send SMS to {$customer->phone}: " . $e->getMessage());
+                Log::error("Failed to send SMS to {$recipient->phone}: " . $e->getMessage());
             }
         }
 
         if (!empty($channels)) {
-            NotificationLog::create([
-                'customer_id' => $customer->id,
+            $logData = [
                 'user_id' => $sender?->id,
                 'channel' => implode(',', $channels),
                 'subject' => $template->subject ?? 'Notification',
                 'message' => $template->email_body ?? $template->sms_body ?? '',
-            ]);
+            ];
+
+            if ($recipient instanceof Customer) {
+                $logData['customer_id'] = $recipient->id;
+            } else {
+                // If it's a User, we might want to log it differently or just store recipient_id if we have such a field
+                // For now, let's keep it simple as the log table might only have customer_id
+                $logData['customer_id'] = null; 
+            }
+
+            NotificationLog::create($logData);
             return true;
         }
 
@@ -81,12 +91,61 @@ class NotificationService
     }
 
     /**
+     * Send a notification to a customer (Legacy wrapper).
+     */
+    public function sendToCustomer(Customer $customer, string $templateSlug, array $data = [], ?User $sender = null): bool
+    {
+        return $this->send($customer, $templateSlug, $data, $sender);
+    }
+
+    /**
+     * Send a notification to a user.
+     */
+    public function sendToUser(User $user, string $templateSlug, array $data = [], ?User $sender = null): bool
+    {
+        return $this->send($user, $templateSlug, $data, $sender);
+    }
+
+    /**
+     * Send a notification to an admin or specific users.
+     */
+    public function sendToAdmin(string $subject, string $message, ?string $severity = 'info', ?int $userId = null): bool
+    {
+        Log::channel('single')->info("ADMIN NOTIFICATION [{$severity}]: {$subject} - {$message}");
+
+        try {
+            // If no specific user ID is provided, this might be a broadcast or system alert.
+            // For now, let's assume if userId is null, it's for all admins.
+            // But to support individual notifications as requested, we allow passing a userId.
+            
+            \App\Models\SystemNotification::create([
+                'user_id' => $userId ?? Auth::id(), // Fallback to current user if none specified
+                'title' => $subject,
+                'message' => $message,
+                'severity' => $severity,
+                'type' => 'system_alert',
+                'is_read' => false,
+            ]);
+            
+            // Add to session flash if in a web request
+            if (request()->hasSession()) {
+                request()->session()->flash($severity === 'danger' ? 'error' : $severity, $message);
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error("Failed to create system notification: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Replace placeholders in a string.
      */
-    protected function replacePlaceholders(string $content, Customer $customer, array $data, ?User $sender, ?GeneralSetting $generalSetting): string
+    protected function replacePlaceholders(string $content, User|Customer $recipient, array $data, ?User $sender, ?GeneralSetting $generalSetting): string
     {
         $placeholders = [
-            '{{fullname}}' => $customer->name,
+            '{{fullname}}' => $recipient->name,
             '{{username}}' => $sender?->name ?? 'User',
             '{{site_name}}' => config('app.name'),
             '{{site_currency}}' => $generalSetting?->currency ?? '',

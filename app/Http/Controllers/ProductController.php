@@ -4,13 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ResolvesCsvUploadPath;
 use App\Http\Requests\ImportProductsRequest;
+use App\Http\Requests\StoreBatchRequest;
 use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\GeneralSetting;
 use App\Models\Product;
+use App\Models\ProductBatch;
 use App\Models\Unit;
+use App\Models\Warehouse;
 use App\Services\ProductService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -41,10 +44,25 @@ class ProductController extends Controller
 
     public function create(): View
     {
+        $categories = getCachedCategories();
+        $brands = getCachedBrands();
+        $units = getCachedUnits();
+        
+        // Ensure lookups are proper collections of model objects (fallback if cache is corrupted)
+        if (!$categories instanceof \Illuminate\Database\Eloquent\Collection) {
+            $categories = \App\Models\Category::orderBy('name')->get();
+        }
+        if (!$brands instanceof \Illuminate\Database\Eloquent\Collection) {
+            $brands = \App\Models\Brand::orderBy('name')->get();
+        }
+        if (!$units instanceof \Illuminate\Database\Eloquent\Collection) {
+            $units = \App\Models\Unit::orderBy('name')->get();
+        }
+        
         return view('products.create', [
-            'categories' => Category::orderBy('name')->get(),
-            'brands' => Brand::orderBy('name')->get(),
-            'units' => Unit::orderBy('name')->get(),
+            'categories' => $categories,
+            'brands' => $brands,
+            'units' => $units,
         ]);
     }
 
@@ -57,11 +75,33 @@ class ProductController extends Controller
 
     public function edit(Product $product): View
     {
+        $categories = getCachedCategories();
+        $brands = getCachedBrands();
+        $units = getCachedUnits();
+        $warehouses = Warehouse::query()->enabled()->orderBy('name')->get();
+        
+        // Ensure lookups are proper collections of model objects (fallback if cache is corrupted)
+        if (!$categories instanceof \Illuminate\Database\Eloquent\Collection) {
+            $categories = \App\Models\Category::orderBy('name')->get();
+        }
+        if (!$brands instanceof \Illuminate\Database\Eloquent\Collection) {
+            $brands = \App\Models\Brand::orderBy('name')->get();
+        }
+        if (!$units instanceof \Illuminate\Database\Eloquent\Collection) {
+            $units = \App\Models\Unit::orderBy('name')->get();
+        }
+        
         return view('products.edit', [
             'product' => $product,
-            'categories' => Category::orderBy('name')->get(),
-            'brands' => Brand::orderBy('name')->get(),
-            'units' => Unit::orderBy('name')->get(),
+            'categories' => $categories,
+            'brands' => $brands,
+            'units' => $units,
+            'warehouses' => $warehouses,
+            'batches' => $product->batches()
+                ->with('warehouse')
+                ->orderBy('warehouse_id')
+                ->orderBy('expiration_date')
+                ->get(),
         ]);
     }
 
@@ -183,5 +223,42 @@ class ProductController extends Controller
         };
 
         return 'data:'.$mime.';base64,'.base64_encode($data);
+    }
+
+    public function storeBatch(StoreBatchRequest $request, Product $product): RedirectResponse
+    {
+        $validated = $request->validated();
+        $validated['product_id'] = $product->id;
+        $validated['quantity_sold'] = 0;
+        $validated['quantity_alert_sent'] = 0;
+        $validated['status'] = 'active';
+
+        ProductBatch::create($validated);
+
+        return redirect()->route('products.edit', $product)->with('success', 'Batch added successfully.');
+    }
+
+    public function updateBatch(StoreBatchRequest $request, Product $product, ProductBatch $batch): RedirectResponse
+    {
+        // Verify batch belongs to this product
+        if ($batch->product_id !== $product->id) {
+            return redirect()->route('products.edit', $product)->with('error', 'Batch not found for this product.');
+        }
+
+        $batch->update($request->validated());
+
+        return redirect()->route('products.edit', $product)->with('success', 'Batch updated successfully.');
+    }
+
+    public function deleteBatch(Product $product, ProductBatch $batch): RedirectResponse
+    {
+        // Verify batch belongs to this product
+        if ($batch->product_id !== $product->id) {
+            return redirect()->route('products.edit', $product)->with('error', 'Batch not found for this product.');
+        }
+
+        $batch->delete();
+
+        return redirect()->route('products.edit', $product)->with('success', 'Batch deleted successfully.');
     }
 }

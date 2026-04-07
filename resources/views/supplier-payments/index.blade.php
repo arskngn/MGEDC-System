@@ -2,7 +2,7 @@
     <div
         x-data="{
             bulkOpen: false,
-            filterOpen: false,
+            filterDropdownOpen: false,
             actionTop: '0px',
             actionRight: '0px',
             filterValue: '{{ $filter }}',
@@ -15,72 +15,25 @@
                     this.actionRight = (window.innerWidth - r.right) + 'px';
                 }
             },
-            selectFilter(value) {
-                this.filterValue = value;
-                this.filterOpen = false;
-                // Update the hidden input immediately
-                const hiddenInput = document.querySelector('input[name="filter"]');
-                if (hiddenInput) {
-                    hiddenInput.value = value;
-                }
-                // Submit the form immediately
-                const form = document.getElementById('search-form');
-                const formData = new FormData(form);
-                const params = new URLSearchParams();
-                
-                // Manually add all values to ensure they're included
-                if (this.searchValue && this.searchValue.trim()) {
-                    params.set('search', this.searchValue.trim());
-                }
-                if (value && value !== 'all') {
-                    params.set('filter', value);
-                }
-                if (this.dateFrom) {
-                    params.set('start_date', this.dateFrom);
-                }
-                if (this.dateTo) {
-                    params.set('end_date', this.dateTo);
-                }
-                
-                window.location.href = `{{ route('supplier-payments.index') }}?${params.toString()}`;
-            },
             submitSearch() {
-                const form = document.getElementById('search-form');
-                const formData = new FormData(form);
-                const params = new URLSearchParams();
-                
-                // Manually add all values to ensure they're included
-                if (this.searchValue.trim()) {
-                    params.set('search', this.searchValue.trim());
-                }
-                if (this.filterValue && this.filterValue !== 'all') {
-                    params.set('filter', this.filterValue);
-                }
-                if (this.dateFrom) {
-                    params.set('start_date', this.dateFrom);
-                }
-                if (this.dateTo) {
-                    params.set('end_date', this.dateTo);
-                }
-                
-                window.location.href = `{{ route('supplier-payments.index') }}?${params.toString()}`;
+                document.getElementById('search-form').submit();
             }
         }"
-        @keydown.escape.window="filterOpen = false; bulkOpen = false"
-        @scroll.window="if (filterOpen) filterOpen = false; if (bulkOpen) bulkOpen = false"
+        @keydown.escape.window="filterDropdownOpen = false; bulkOpen = false"
+        @scroll.window="if (filterDropdownOpen) filterDropdownOpen = false; if (bulkOpen) bulkOpen = false"
         class="space-y-4"
     >
         <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <h2 class="text-xl font-bold text-[#0a1233] shrink-0">Supplier Payments</h2>
 
             <div class="flex flex-wrap items-center gap-2 lg:gap-2 lg:ml-auto lg:justify-end">
-                <form id="search-form" ref="filterForm" method="GET" action="{{ route('supplier-payments.index') }}" class="inline-flex flex-wrap items-center gap-2" x-data="purchaseDateRange({ dateFrom: '{{ $startDate }}', dateTo: '{{ $endDate }}' })">
+                <form id="search-form" ref="filterForm" method="GET" action="{{ route('supplier-payments.index') }}" class="inline-flex flex-wrap items-center gap-2" x-data="purchaseDateRange({ dateFrom: '{{ $startDate }}', dateTo: '{{ $endDate }}' })" @keydown.escape.window="escapeClose()">
                     <!-- Filter Dropdown -->
-                    <div class="relative" x-data="{ open: false }">
+                    <div class="relative">
                         <button
                             type="button"
-                            @click="open = !open"
-                            @click.outside="open = false"
+                            @click="filterDropdownOpen = !filterDropdownOpen"
+                            @click.outside="filterDropdownOpen = false"
                             class="inline-flex items-center px-4 py-2 bg-white border border-[#5542ff]/40 rounded-md focus:outline-none focus:ring-1 focus:ring-[#5542ff] focus:border-[#5542ff] text-sm hover:bg-[#5542ff]/5 transition-colors"
                         >
                             @if($filter === 'paid_for_purchase')
@@ -96,7 +49,7 @@
                         </button>
 
                         <div
-                            x-show="open"
+                            x-show="filterDropdownOpen"
                             x-cloak
                             class="absolute top-full left-0 mt-1 w-48 bg-white rounded-lg shadow-xl border border-gray-100 py-1 z-50"
                         >

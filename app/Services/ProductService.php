@@ -6,11 +6,14 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\Brand;
 use App\Models\Unit;
+use App\Traits\CsvSanitization;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 
 class ProductService
 {
+    use CsvSanitization;
+
     public function __construct(protected ImportExportService $importExportService)
     {
     }
@@ -74,7 +77,10 @@ class ProductService
             ];
         }
 
-        return $this->importExportService->downloadCsv('products-' . time() . '.csv', $headers, $rows);
+        // Sanitize rows to prevent formula injection in spreadsheet applications
+        $sanitizedRows = $this->sanitizeCsvRows($rows);
+
+        return $this->importExportService->downloadCsv('products-' . time() . '.csv', $headers, $sanitizedRows);
     }
 
     /**
@@ -99,9 +105,9 @@ class ProductService
             }
         }
 
-        $categories = Category::all()->keyBy(fn($c) => strtolower($c->name));
-        $brands = Brand::all()->keyBy(fn($b) => strtolower($b->name));
-        $units = Unit::all();
+        $categories = getCachedCategories(keyedByName: true);
+        $brands = getCachedBrands(keyedByName: true);
+        $units = getCachedUnits();
         $unitByShort = $units->keyBy(fn($u) => strtolower($u->short_name));
         $unitByName = $units->keyBy(fn($u) => strtolower($u->name));
 

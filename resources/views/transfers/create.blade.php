@@ -30,6 +30,8 @@
                     unit_label: p.unit_label,
                     in_stock: p.in_stock,
                     quantity: 1,
+                    product_batch_id: '',
+                    batches: p.batches || []
                 });
                 this.productQuery = '';
                 this.searchResults = [];
@@ -99,6 +101,7 @@
                     <thead>
                         <tr class="bg-[#0a1233] text-white">
                             <th class="px-4 py-3 text-left text-[11px] font-bold uppercase">Name</th>
+                            <th class="px-4 py-3 text-left text-[11px] font-bold uppercase">Batch <span class="text-red-300">*</span></th>
                             <th class="px-4 py-3 text-left text-[11px] font-bold uppercase">In Stock</th>
                             <th class="px-4 py-3 text-right text-[11px] font-bold uppercase">Quantity <span class="text-red-300">*</span></th>
                             <th class="px-4 py-3 text-center text-[11px] font-bold uppercase">Action</th>
@@ -111,6 +114,14 @@
                                     <input type="hidden" :name="`items[${idx}][product_id]`" :value="item.product_id" />
                                     <div class="text-sm font-semibold text-gray-900" x-text="item.name"></div>
                                     <div class="text-xs text-gray-500" x-text="item.sku"></div>
+                                </td>
+                                <td class="px-4 py-3">
+                                    <select :name="`items[${idx}][product_batch_id]`" x-model="item.product_batch_id" required class="w-full px-3 py-2 border border-gray-200 rounded text-sm focus:ring-1 focus:ring-[#4634ff]">
+                                        <option value="">Select Batch</option>
+                                        <template x-for="b in item.batches" :key="b.id">
+                                            <option :value="b.id" x-text="`${b.batch_number} (Exp: ${b.expiration_date}) - ${b.available} available`"></option>
+                                        </template>
+                                    </select>
                                 </td>
                                 <td class="px-4 py-3">
                                     <div class="text-sm text-gray-600" x-text="`${item.in_stock} ${item.unit_label}`"></div>

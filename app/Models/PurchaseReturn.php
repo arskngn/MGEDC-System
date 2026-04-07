@@ -5,9 +5,30 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property int $id
+ * @property int $purchase_id
+ * @property string $return_invoice_no
+ * @property \Carbon\Carbon $return_date
+ * @property int $warehouse_id
+ * @property float $subtotal
+ * @property float $discount
+ * @property float $receivable_amount
+ * @property float $received_amount
+ * @property string|null $note
+ * @property \Carbon\Carbon|null $created_at
+ * @property \Carbon\Carbon|null $updated_at
+ * @property \Carbon\Carbon|null $deleted_at
+ * @property-read \App\Models\Purchase $purchase
+ * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\PurchaseReturnItem[] $items
+ * @property-read \Illuminate\Database\Eloquent\Collection|\App\Models\PurchaseReturnPayment[] $payments
+ * @property-read float $due_amount
+ */
 class PurchaseReturn extends Model
 {
+    use SoftDeletes;
     protected $fillable = [
         'purchase_id',
         'return_invoice_no',
@@ -58,11 +79,12 @@ class PurchaseReturn extends Model
 
     public static function nextInvoiceNo(): string
     {
+        // Use database-level locking to prevent race conditions
         $max = static::query()
             ->where('return_invoice_no', 'like', 'PR-%')
-            ->get()
-            ->map(fn ($r) => (int) preg_replace('/\D/', '', substr($r->return_invoice_no, 2)))
-            ->max() ?? 0;
+            ->lockForUpdate()
+            ->latest('id')
+            ->value(\DB::raw("CAST(SUBSTRING(return_invoice_no, 4) AS UNSIGNED)")) ?? 0;
 
         return 'PR-'.str_pad((string) ($max + 1), 7, '0', STR_PAD_LEFT);
     }

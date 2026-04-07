@@ -136,17 +136,20 @@ class SaleController extends Controller
     public function searchProducts(Request $request)
     {
         $q = $request->string('q')->trim()->value();
-        if (strlen($q) < 1) {
-            return response()->json([]);
-        }
 
         $products = Product::query()
             ->with('unit')
-            ->where(function ($query) use ($q) {
-                $query->where('name', 'like', '%'.$q.'%')
-                    ->orWhere('sku', 'like', '%'.$q.'%');
+            ->when($q !== '', function ($query) use ($q) {
+                $query->where(function ($query) use ($q) {
+                    $query->where('name', 'like', '%' . $q . '%')
+                        ->orWhere('sku', 'like', '%' . $q . '%');
+                });
             })
-            ->orderBy('name')
+            ->when($q === '', function ($query) {
+                $query->orderByDesc('id');
+            }, function ($query) {
+                $query->orderBy('name');
+            })
             ->limit(25)
             ->get()
             ->map(fn (Product $p) => [
@@ -178,6 +181,7 @@ class SaleController extends Controller
             'return_items.*.return_quantity' => ['required', 'numeric', 'min:0'],
             'note' => ['nullable', 'string'],
             'discount' => ['required', 'numeric', 'min:0'],
+            'restocking_fee' => ['required', 'numeric', 'min:0'],
         ]);
 
         $sale->load(['items', 'customer', 'warehouse']);
@@ -192,7 +196,8 @@ class SaleController extends Controller
             $sale,
             $returnItems->toArray(),
             (float) $request->input('discount', 0),
-            $request->input('note')
+            $request->input('note'),
+            (float) $request->input('restocking_fee', 0)
         );
 
         return redirect()->route('sales.all')->with('success', 'Sale return recorded successfully.');

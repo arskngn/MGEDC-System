@@ -37,10 +37,10 @@ class AdjustmentService
                 AdjustmentItem::create([
                     'adjustment_id' => $adjustment->id,
                     'product_id' => $product->id,
+                    'product_batch_id' => $item['product_batch_id'] ?? null,
                     'product_name' => $product->name,
                     'sku' => $product->sku,
-                    'current_stock' => $product->current_stock,
-                    'adjust_qty' => $item['quantity'],
+                    'quantity' => $item['quantity'],
                     'type' => $item['type'],
                     'unit_label' => $product->unit?->short_name ?? $product->unit?->name,
                 ]);
@@ -76,8 +76,8 @@ class AdjustmentService
                 $existingEffect = 0;
                 if ($existingItem) {
                     $existingEffect = ($existingItem->type === AdjustmentType::Addition->value) 
-                        ? (float)$existingItem->adjust_qty 
-                        : -(float)$existingItem->adjust_qty;
+                        ? (float)$existingItem->quantity 
+                        : -(float)$existingItem->quantity;
                 }
 
                 $availableStock = (float)$product->current_stock - $existingEffect;
@@ -98,10 +98,10 @@ class AdjustmentService
                 AdjustmentItem::create([
                     'adjustment_id' => $adjustment->id,
                     'product_id' => $product->id,
+                    'product_batch_id' => $item['product_batch_id'] ?? null,
                     'product_name' => $product->name,
                     'sku' => $product->sku,
-                    'current_stock' => $product->current_stock,
-                    'adjust_qty' => $item['quantity'],
+                    'quantity' => $item['quantity'],
                     'type' => $item['type'],
                     'unit_label' => $product->unit?->short_name ?? $product->unit?->name,
                 ]);

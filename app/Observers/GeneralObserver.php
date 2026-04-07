@@ -25,7 +25,14 @@ class GeneralObserver
         unset($changes['updated_at']);
         
         if (!empty($changes)) {
-            event(new ModelChanged('updated', $model, $changes));
+            $audit = [];
+            foreach ($changes as $key => $value) {
+                $audit[$key] = [
+                    'old' => $model->getOriginal($key),
+                    'new' => $value
+                ];
+            }
+            event(new ModelChanged('updated', $model, $audit));
         }
     }
 

@@ -13,6 +13,23 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use App\Traits\HandlesFileUploads;
 
+/**
+ * @property int $id
+ * @property string $name
+ * @property string $email
+ * @property \Illuminate\Support\Carbon|null $email_verified_at
+ * @property string $password
+ * @property string|null $remember_token
+ * @property string|null $phone
+ * @property string|null $image
+ * @property string $status
+ * @property \Illuminate\Support\Carbon|null $last_seen
+ * @property \Illuminate\Support\Carbon $created_at
+ * @property \Illuminate\Support\Carbon $updated_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Role> $roles
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Sale> $sales
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\StaffTarget> $targets
+ */
 #[Fillable(['name', 'email', 'phone', 'password', 'image', 'status', 'last_seen'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
@@ -51,9 +68,14 @@ class User extends Authenticatable
 
     public function hasPermission($permission): bool
     {
-        return $this->roles()->whereHas('permissions', function ($query) use ($permission) {
-            $query->where('name', $permission);
-        })->exists();
+        // Cache permissions for the current session (1 hour TTL)
+        $cacheKey = "user_permission_{$this->id}_{$permission}";
+        
+        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 3600, function () use ($permission) {
+            return $this->roles()->whereHas('permissions', function ($query) use ($permission) {
+                $query->where('name', $permission);
+            })->exists();
+        });
     }
 
     public function canAccessAny(array $permissions): bool

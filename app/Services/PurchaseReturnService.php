@@ -6,7 +6,9 @@ use App\Models\Purchase;
 use App\Models\PurchaseReturn;
 use App\Models\PurchaseReturnItem;
 use App\Models\PurchaseReturnPayment;
+use App\Models\Product;
 use App\Events\PurchaseReturnCreated;
+use App\Exceptions\InsufficientStockException;
 use Illuminate\Support\Facades\DB;
 
 class PurchaseReturnService
@@ -16,9 +18,31 @@ class PurchaseReturnService
      */
     public function createReturn(Purchase $purchase, array $data): PurchaseReturn
     {
-        $totals = $this->calculateTotals($purchase, $data['items'], (float) ($data['discount'] ?? 0));
+        $ret = DB::transaction(function () use ($purchase, $data) {
+            // Validate stock before recording return
+            foreach ($data['items'] as $item) {
+                $purchaseItem = $purchase->items->firstWhere('id', $item['purchase_item_id']);
+                if (!$purchaseItem) continue;
 
-        $ret = DB::transaction(function () use ($purchase, $data, $totals) {
+                $product = Product::where('id', $purchaseItem->product_id)->lockForUpdate()->firstOrFail();
+                $returnQty = (float) $item['return_quantity'];
+
+                if ($returnQty > 0) {
+                    // 1. Check if we have enough physical stock in total
+                    if ($product->current_stock < $returnQty) {
+                        throw new InsufficientStockException($product, "Insufficient physical stock for purchase return.");
+                    }
+
+                    // 2. Check if we are returning more than we bought (remaining returnable)
+                    $remaining = PurchaseReturn::remainingReturnableForPurchaseItem($purchaseItem);
+                    if ($returnQty > $remaining) {
+                        throw new InsufficientStockException($product, "Returning more than what was originally purchased or already returned.");
+                    }
+                }
+            }
+
+            $totals = $this->calculateTotals($purchase, $data['items'], (float) ($data['discount'] ?? 0));
+
             $ret = PurchaseReturn::create([
                 'purchase_id' => $purchase->id,
                 'return_invoice_no' => PurchaseReturn::nextInvoiceNo(),
@@ -51,9 +75,34 @@ class PurchaseReturnService
     public function updateReturn(PurchaseReturn $purchaseReturn, array $data): PurchaseReturn
     {
         $purchase = $purchaseReturn->purchase;
-        $totals = $this->calculateTotals($purchase, $data['items'], (float) ($data['discount'] ?? 0), $purchaseReturn->id);
 
-        return DB::transaction(function () use ($purchaseReturn, $data, $totals) {
+        return DB::transaction(function () use ($purchaseReturn, $purchase, $data) {
+            // Validate stock before updating return
+            foreach ($data['items'] as $item) {
+                $purchaseItem = $purchase->items->firstWhere('id', $item['purchase_item_id']);
+                if (!$purchaseItem) continue;
+
+                $product = Product::where('id', $purchaseItem->product_id)->lockForUpdate()->firstOrFail();
+                $existingItem = $purchaseReturn->items->where('purchase_item_id', $purchaseItem->id)->first();
+                $existingQty = $existingItem ? (float)$existingItem->return_quantity : 0;
+                $returnQty = (float) $item['return_quantity'];
+
+                if ($returnQty > 0) {
+                    // 1. Check physical stock (accounting for what's already returned in THIS transaction)
+                    if (($product->current_stock + $existingQty) < $returnQty) {
+                        throw new InsufficientStockException($product, "Insufficient physical stock for purchase return.");
+                    }
+
+                    // 2. Check remaining returnable (accounting for what's already returned in THIS transaction)
+                    $remaining = PurchaseReturn::remainingReturnableForPurchaseItem($purchaseItem, $purchaseReturn->id);
+                    if ($returnQty > $remaining) {
+                        throw new InsufficientStockException($product, "Returning more than what was originally purchased or already returned.");
+                    }
+                }
+            }
+
+            $totals = $this->calculateTotals($purchase, $data['items'], (float) ($data['discount'] ?? 0), $purchaseReturn->id);
+
             $purchaseReturn->items()->delete();
 
             $purchaseReturn->update([

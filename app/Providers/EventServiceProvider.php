@@ -12,12 +12,14 @@ use App\Events\AdjustmentCreated;
 use App\Events\TransferCreated;
 use App\Events\StaffCreated;
 use App\Events\ModelChanged;
+use App\Events\ProductBatchExpiringAlert;
 use App\Listeners\SendSaleNotification;
 use App\Listeners\CheckLowStock;
 use App\Listeners\SendStaffWelcomeNotification;
 use App\Listeners\UpdateUserLastSeen;
 use App\Listeners\LogModelActivity;
 use App\Listeners\PasswordResetListener;
+use App\Listeners\CreateExpirationNotification;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Auth\Events\Registered;
@@ -71,6 +73,9 @@ class EventServiceProvider extends ServiceProvider
         ],
         TransferCreated::class => [
             CheckLowStock::class,
+        ],
+        ProductBatchExpiringAlert::class => [
+            CreateExpirationNotification::class,
         ],
     ];
 

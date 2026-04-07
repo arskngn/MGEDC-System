@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('sku');
             $table->decimal('quantity', 12, 4);
             $table->string('unit_label');
-            $table->enum('type', ['Added', 'Removed']);
+            $table->enum('type', ['Add', 'Remove']);
             $table->timestamps();
             
             $table->index(['adjustment_id']);

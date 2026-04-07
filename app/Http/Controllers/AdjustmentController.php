@@ -88,9 +88,14 @@ class AdjustmentController extends Controller
     public function searchProducts(Request $request)
     {
         $q = $request->string('q')->trim()->value();
+        $warehouseId = $request->integer('warehouse_id');
 
         $products = Product::query()
-            ->where('status', true)
+            ->with(['unit', 'batches' => function ($query) use ($warehouseId) {
+                $query->where('warehouse_id', $warehouseId)
+                    ->whereIn('status', ['active', 'expiring'])
+                    ->whereRaw('quantity > quantity_sold');
+            }])
             ->where(function ($query) use ($q) {
                 $query->where('name', 'like', '%'.$q.'%')
                     ->orWhere('sku', 'like', '%'.$q.'%');
@@ -98,13 +103,23 @@ class AdjustmentController extends Controller
             ->orderBy('name')
             ->limit(25)
             ->get()
-            ->map(fn (Product $p) => [
-                'id' => $p->id,
-                'name' => $p->name,
-                'sku' => $p->sku,
-                'unit_label' => $p->unit->short_name ?? $p->unit->name,
-                'in_stock' => $p->current_stock,
-            ]);
+            ->map(function ($p) {
+                return [
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'sku' => $p->sku,
+                    'unit_label' => $p->unit->short_name ?? $p->unit->name,
+                    'in_stock' => $p->current_stock,
+                    'batches' => $p->batches->map(function ($b) {
+                        return [
+                            'id' => $b->id,
+                            'batch_number' => $b->batch_number,
+                            'expiration_date' => $b->expiration_date->format('Y-m-d'),
+                            'available' => $b->quantity - $b->quantity_sold,
+                        ];
+                    }),
+                ];
+            });
 
         return response()->json($products);
     }

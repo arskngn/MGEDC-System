@@ -112,6 +112,7 @@
                             <th class="px-4 py-4 text-[11px] font-bold uppercase tracking-wide text-center">Stock</th>
                             <th class="px-4 py-4 text-[11px] font-bold uppercase tracking-wide text-center">Total Sale | Alert Qty</th>
                             <th class="px-4 py-4 text-[11px] font-bold uppercase tracking-wide text-center">Unit</th>
+                            <th class="px-4 py-4 text-[11px] font-bold uppercase tracking-wide text-center">Expiration</th>
                             <th class="px-4 py-4 text-[11px] font-bold uppercase tracking-wide text-center">Action</th>
                         </tr>
                     </thead>
@@ -121,6 +122,27 @@
                                 $unitLabel = $product->unit->short_name ?? $product->unit->name;
                                 $stockStr = rtrim(rtrim(number_format((float) $product->current_stock, 4, '.', ''), '0'), '.') ?: '0';
                                 $low = (float) $product->current_stock <= (float) $product->alert_quantity;
+                                
+                                // Get expiration status
+                                $firstBatch = $product->batches()
+                                    ->where('expiration_date', '>=', now())
+                                    ->orderBy('expiration_date')
+                                    ->first();
+                                $expiredBatch = $product->batches()
+                                    ->where('expiration_date', '<', now())
+                                    ->orderBy('expiration_date', 'desc')
+                                    ->first();
+                                    
+                                $expirationStatus = null;
+                                if ($expiredBatch) {
+                                    $expirationStatus = ['type' => 'expired', 'date' => $expiredBatch->expiration_date];
+                                } elseif ($firstBatch && now()->diffInDays($firstBatch->expiration_date) < 5) {
+                                    $expirationStatus = ['type' => 'urgent', 'date' => $firstBatch->expiration_date];
+                                } elseif ($firstBatch && now()->diffInDays($firstBatch->expiration_date) < 30) {
+                                    $expirationStatus = ['type' => 'warning', 'date' => $firstBatch->expiration_date];
+                                } elseif ($firstBatch) {
+                                    $expirationStatus = ['type' => 'normal', 'date' => $firstBatch->expiration_date];
+                                }
                             @endphp
                             <tr class="hover:bg-gray-50/90 transition-colors bg-white">
                                 <td class="px-4 py-4 align-middle">
@@ -150,6 +172,32 @@
                                     </div>
                                 </td>
                                 <td class="px-4 py-4 align-middle text-sm font-normal text-gray-600">{{ $unitLabel }}</td>
+                                <td class="px-4 py-4 align-middle text-center">
+                                    @if($expirationStatus)
+                                        @php
+                                            $badgeClasses = [
+                                                'expired' => 'bg-red-100 text-red-800 border border-red-300',
+                                                'urgent' => 'bg-orange-100 text-orange-800 border border-orange-300',
+                                                'warning' => 'bg-yellow-100 text-yellow-800 border border-yellow-300',
+                                                'normal' => 'bg-green-100 text-green-800 border border-green-300',
+                                            ];
+                                            $labels = [
+                                                'expired' => 'Expired',
+                                                'urgent' => 'Urgent',
+                                                'warning' => 'Warning',
+                                                'normal' => 'Normal',
+                                            ];
+                                        @endphp
+                                        <div class="flex flex-col items-center gap-1">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold {{ $badgeClasses[$expirationStatus['type']] }}">
+                                                {{ $labels[$expirationStatus['type']] }}
+                                            </span>
+                                            <div class="text-xs text-gray-600">{{ $expirationStatus['date']->format('M d, Y') }}</div>
+                                        </div>
+                                    @else
+                                        <span class="text-gray-400 text-xs">—</span>
+                                    @endif
+                                </td>
                                 <td class="px-4 py-4 align-middle">
                                     <div class="flex justify-center">
                                         @if(auth()->user()->hasPermission('Product Edit'))
@@ -165,7 +213,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="px-6 py-12 text-center text-gray-500">No products found.</td>
+                                <td colspan="7" class="px-6 py-12 text-center text-gray-500">No products found.</td>
                             </tr>
                         @endforelse
                     </tbody>

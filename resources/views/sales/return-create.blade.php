@@ -18,6 +18,7 @@
         x-data="{
             items: [],
             discount: 0,
+            restockingFee: 0,
             init() {
                 const el = document.getElementById('sale-return-items');
                 if (el && el.textContent) {
@@ -31,7 +32,9 @@
             get subtotal() {
                 return this.items.reduce((a, _, i) => a + this.rowTotal(i), 0);
             },
-            get payableToCustomer() { return Math.max(0, this.subtotal - (parseFloat(this.discount) || 0)); },
+            get payableToCustomer() { 
+                return Math.max(0, this.subtotal - (parseFloat(this.discount) || 0) - (parseFloat(this.restockingFee) || 0)); 
+            },
         }"
     >
         <div class="flex justify-between items-center">
@@ -133,6 +136,13 @@
                         <div class="flex rounded-lg border border-gray-200 overflow-hidden">
                             <span class="px-3 py-2 bg-gray-100 text-gray-500">{{ currencySymbol() }}</span>
                             <input type="number" name="discount" step="0.01" min="0" x-model="discount" class="flex-1 px-3 py-2 text-sm" />
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Restocking Fee</label>
+                        <div class="flex rounded-lg border border-gray-200 overflow-hidden">
+                            <span class="px-3 py-2 bg-gray-100 text-gray-500">{{ currencySymbol() }}</span>
+                            <input type="number" name="restocking_fee" step="0.01" min="0" x-model="restockingFee" class="flex-1 px-3 py-2 text-sm" />
                         </div>
                     </div>
                     <div>

@@ -17,7 +17,7 @@ class StaffPerformanceController extends Controller
      */
     public function dashboard(Request $request)
     {
-        $targetType = $request->get('type', 'monthly'); // daily, weekly, monthly
+        $targetType = $request->input('type', 'monthly'); // daily, weekly, monthly
         
         // Define date range based on type
         [$startDate, $endDate] = $this->getDateRange($targetType);
@@ -80,7 +80,7 @@ class StaffPerformanceController extends Controller
      */
     public function show(Request $request, User $user)
     {
-        $targetType = $request->get('type', 'monthly');
+        $targetType = $request->input('type', 'monthly');
         [$startDate, $endDate] = $this->getDateRange($targetType);
 
         // Fetch targets for the user

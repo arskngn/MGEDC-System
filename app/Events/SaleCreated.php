@@ -8,7 +8,7 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
-use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
 
 class SaleCreated implements ShouldBroadcast
 {
@@ -23,18 +23,20 @@ class SaleCreated implements ShouldBroadcast
 
     /**
      * Get the channels the event should broadcast on.
+     * Using private channel to prevent unauthorized access to customer data.
      *
      * @return array<int, \Illuminate\Broadcasting\Channel>
      */
     public function broadcastOn(): array
     {
         return [
-            new Channel('sales'),
+            new PrivateChannel('warehouse.'.$this->sale->warehouse_id),
         ];
     }
 
     /**
      * Get the data to broadcast.
+     * Only broadcast sale ID and amount - exclude customer info from public broadcast.
      *
      * @return array<string, mixed>
      */
@@ -42,8 +44,7 @@ class SaleCreated implements ShouldBroadcast
     {
         return [
             'id' => $this->sale->id,
-            'total_amount' => $this->sale->total_amount,
-            'customer_name' => $this->sale->customer->name ?? 'Guest',
+            'receivable_amount' => $this->sale->receivable_amount,
             'created_at' => $this->sale->created_at->toDateTimeString(),
         ];
     }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\GeneralSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Auth;
 
 class GeneralSettingController extends Controller
 {
@@ -31,7 +32,8 @@ class GeneralSettingController extends Controller
 
     public function logoFavicon()
     {
-        if (! auth()->user()->hasRole('admin')) {
+        $user = Auth::user();
+        if (!$user instanceof \App\Models\User || !$user->hasRole('admin')) {
             abort(403, 'Unauthorized action.');
         }
         $setting = GeneralSetting::first();
@@ -41,7 +43,8 @@ class GeneralSettingController extends Controller
 
     public function updateLogoFavicon(Request $request)
     {
-        if (! auth()->user()->hasRole('admin')) {
+        $user = Auth::user();
+        if (!$user instanceof \App\Models\User || !$user->hasRole('admin')) {
             abort(403, 'Unauthorized action.');
         }
         $request->validate([
@@ -106,10 +109,14 @@ class GeneralSettingController extends Controller
             'timezone' => 'required|string',
             'records_per_page' => 'required|integer|min:1',
             'currency_format' => 'required|in:both,text,symbol',
+            'notification_retention_days' => 'nullable|integer|min:1|max:365',
         ];
 
+        $user = Auth::user();
+        $isAdmin = $user instanceof \App\Models\User && $user->hasRole('admin');
+
         // Only admins can update these fields
-        if (auth()->user()->hasRole('admin')) {
+        if ($isAdmin) {
             $rules['site_title'] = 'required|string|max:255';
             $rules['full_company_name'] = 'required|string|max:255';
             $rules['currency'] = 'required|string|max:10';
@@ -121,7 +128,7 @@ class GeneralSettingController extends Controller
         $setting = GeneralSetting::first();
 
         $data = $request->all();
-        if (! auth()->user()->hasRole('admin')) {
+        if (!$isAdmin) {
             unset($data['site_title']);
             unset($data['full_company_name']);
             unset($data['currency']);

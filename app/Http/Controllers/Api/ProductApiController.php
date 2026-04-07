@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProductResource;
+use App\Models\GeneralSetting;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -16,13 +17,14 @@ class ProductApiController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $search = $request->string('search')->trim()->value();
+        $perPage = GeneralSetting::first()?->records_per_page ?? 20;
         
         $products = Product::with(['category', 'brand', 'unit'])
             ->when($search !== '', function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('sku', 'like', "%{$search}%");
             })
-            ->paginate(15);
+            ->paginate($perPage);
 
         return ProductResource::collection($products);
     }

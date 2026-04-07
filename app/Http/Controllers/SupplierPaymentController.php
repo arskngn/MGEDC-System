@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\GeneralSetting;
 use App\Models\Purchase;
 use App\Models\PurchasePayment;
 use App\Models\PurchaseReturn;
@@ -68,24 +69,15 @@ class SupplierPaymentController extends Controller
     {
         $user = $request->user();
 
-        $payablePurchases = Purchase::query()
-            ->where('supplier_id', $supplier->id)
-            ->whereRaw('payable_amount - paid_amount > 0.009')
-            ->get();
+        DB::transaction(function () use ($user, $supplier) {
+            if ($user && $user->hasPermission('Store Supplier Payment')) {
+                // Lock purchases for update to prevent race conditions
+                $payablePurchases = Purchase::query()
+                    ->where('supplier_id', $supplier->id)
+                    ->whereRaw('payable_amount - paid_amount > 0.009')
+                    ->lockForUpdate()
+                    ->get();
 
-        $receivableReturns = PurchaseReturn::query()
-            ->whereRaw('receivable_amount - received_amount > 0.009')
-            ->whereHas('purchase', fn ($q) => $q->where('supplier_id', $supplier->id))
-            ->get();
-
-        if ($payablePurchases->isEmpty() && $receivableReturns->isEmpty()) {
-            return redirect()
-                ->route('suppliers.payments.index', $supplier)
-                ->with('success', 'No unsettled payment found for this supplier.');
-        }
-
-        DB::transaction(function () use ($user, $supplier, $payablePurchases, $receivableReturns) {
-            if ($user && $user->hasPermission('Store Supplier Payment') && $payablePurchases->isNotEmpty()) {
                 foreach ($payablePurchases as $p) {
                     $due = (float) $p->due_amount;
                     if ($due <= 0.0001) {
@@ -102,7 +94,14 @@ class SupplierPaymentController extends Controller
                 }
             }
 
-            if ($user && $user->hasPermission('Store Supplier Payment Receive') && $receivableReturns->isNotEmpty()) {
+            if ($user && $user->hasPermission('Store Supplier Payment Receive')) {
+                // Lock purchase returns for update to prevent race conditions
+                $receivableReturns = PurchaseReturn::query()
+                    ->whereRaw('receivable_amount - received_amount > 0.009')
+                    ->whereHas('purchase', fn ($q) => $q->where('supplier_id', $supplier->id))
+                    ->lockForUpdate()
+                    ->get();
+
                 foreach ($receivableReturns as $r) {
                     $due = (float) $r->due_amount;
                     if ($due <= 0.0001) {
@@ -126,10 +125,10 @@ class SupplierPaymentController extends Controller
 
     public function allPayments(Request $request): View
     {
-        $query = $request->get('search', '');
-        $filter = $request->get('filter', 'all');
-        $startDate = $request->get('start_date');
-        $endDate = $request->get('end_date');
+        $query = $request->input('search', '');
+        $filter = $request->input('filter', 'all');
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
 
         // Get Purchase Payments
         $purchasePaymentsQuery = PurchasePayment::with(['purchase.supplier', 'user'])
@@ -221,10 +220,10 @@ class SupplierPaymentController extends Controller
 
     public function exportPdf(Request $request)
     {
-        $query = $request->get('search', '');
-        $filter = $request->get('filter', 'all');
-        $startDate = $request->get('start_date');
-        $endDate = $request->get('end_date');
+        $query = $request->input('search', '');
+        $filter = $request->input('filter', 'all');
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
 
         $payments = collect();
 
@@ -301,22 +300,51 @@ class SupplierPaymentController extends Controller
             ->sortByDesc('date')
             ->values();
 
+        $generalSetting = GeneralSetting::first();
+
         $pdf = Pdf::loadView('supplier-payments.pdf', [
             'payments' => $allPayments,
             'filter' => $filter,
             'startDate' => $startDate,
-            'endDate' => $endDate
-        ]);
+            'endDate' => $endDate,
+            'generalSetting' => $generalSetting,
+            'logoSrc' => $this->pdfLogoDataUri($generalSetting),
+        ])->setPaper('a4', 'portrait');
 
         return $pdf->download('supplier-payments.pdf');
     }
 
+    private function pdfLogoDataUri(?GeneralSetting $generalSetting): ?string
+    {
+        if (! $generalSetting || ! $generalSetting->logo_light) {
+            return null;
+        }
+        $path = public_path($generalSetting->logo_light);
+        if (! is_readable($path)) {
+            return null;
+        }
+        $data = @file_get_contents($path);
+        if ($data === false) {
+            return null;
+        }
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $mime = match ($ext) {
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+            'svg' => 'image/svg+xml',
+            default => 'image/jpeg',
+        };
+
+        return 'data:'.$mime.';base64,'.base64_encode($data);
+    }
+
     public function exportCsv(Request $request): StreamedResponse
     {
-        $query = $request->get('search', '');
-        $filter = $request->get('filter', 'all');
-        $startDate = $request->get('start_date');
-        $endDate = $request->get('end_date');
+        $query = $request->input('search', '');
+        $filter = $request->input('filter', 'all');
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
 
         $payments = collect();
 

@@ -18,6 +18,11 @@ class UpdateUserLastSeen
         $user = $event->user;
 
         if ($user instanceof User) {
+            // Check if this is the first login
+            if ($user->last_seen === null) {
+                session()->flash('welcome_first_time', true);
+            }
+
             // Update last seen timestamp
             $user->update([
                 'last_seen' => now(),

@@ -24,12 +24,14 @@ class DashboardController extends Controller
         $summary = $this->dashboardService->getSummaryStats();
         $transactions = $this->dashboardService->getTransactionStats();
         $recentSales = $this->dashboardService->getRecentSales();
+        $expiringBatches = $this->dashboardService->getExpiringBatches();
         $settings = GeneralSetting::first();
 
         return view('dashboard', [
             'summary' => $summary,
             'transactions' => $transactions,
             'recentSales' => $recentSales,
+            'expiringBatches' => $expiringBatches,
             'settings' => $settings,
         ]);
     }

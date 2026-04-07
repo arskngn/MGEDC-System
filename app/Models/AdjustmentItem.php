@@ -10,10 +10,10 @@ class AdjustmentItem extends Model
     protected $fillable = [
         'adjustment_id',
         'product_id',
+        'product_batch_id',
         'product_name',
         'sku',
-        'current_stock',
-        'adjust_qty',
+        'quantity',
         'type',
         'unit_label',
     ];
@@ -26,5 +26,10 @@ class AdjustmentItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function batch(): BelongsTo
+    {
+        return $this->belongsTo(ProductBatch::class, 'product_batch_id');
     }
 }

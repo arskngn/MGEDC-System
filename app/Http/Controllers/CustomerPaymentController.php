@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\GeneralSetting;
 use App\Models\Sale;
 use App\Models\SalePayment;
 use App\Models\SaleReturn;
 use App\Models\SaleReturnPayment;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -80,28 +82,15 @@ class CustomerPaymentController extends Controller
     {
         $user = $request->user();
 
-        $receivableSales = Sale::query()
-            ->where('customer_id', $customer->id)
-            ->whereRaw('receivable_amount - paid_amount > 0.009')
-            ->get();
+        DB::transaction(function () use ($user, $customer) {
+            if ($user && $user->hasPermission('Store Customer Payment')) {
+                // Lock sales for update to prevent race conditions
+                $receivableSales = Sale::query()
+                    ->where('customer_id', $customer->id)
+                    ->whereRaw('receivable_amount - paid_amount > 0.009')
+                    ->lockForUpdate()
+                    ->get();
 
-        $payableReturns = DB::table('sale_returns')
-            ->join('sales', 'sales.id', '=', 'sale_returns.sale_id')
-            ->select([
-                'sale_returns.id',
-                'sale_returns.payable_amount',
-                'sale_returns.paid_amount',
-            ])
-            ->where('sales.customer_id', $customer->id)
-            ->whereRaw('sale_returns.payable_amount - sale_returns.paid_amount > 0.009')
-            ->get();
-
-        if ($receivableSales->isEmpty() && $payableReturns->isEmpty()) {
-            return redirect()->route('customers.payments.index', $customer)->with('success', 'No unsettled payment found for this customer.');
-        }
-
-        DB::transaction(function () use ($user, $customer, $receivableSales, $payableReturns) {
-            if ($user && $user->hasPermission('Store Customer Payment') && $receivableSales->isNotEmpty()) {
                 foreach ($receivableSales as $s) {
                     $due = (float) $s->due_amount;
                     if ($due <= 0.0001) {
@@ -118,7 +107,20 @@ class CustomerPaymentController extends Controller
                 }
             }
 
-            if ($user && $user->hasPermission('Store Payable Payment Of Customer') && $payableReturns->isNotEmpty()) {
+            if ($user && $user->hasPermission('Store Payable Payment Of Customer')) {
+                // Lock sale returns for update to prevent race conditions
+                $payableReturns = DB::table('sale_returns')
+                    ->join('sales', 'sales.id', '=', 'sale_returns.sale_id')
+                    ->select([
+                        'sale_returns.id',
+                        'sale_returns.payable_amount',
+                        'sale_returns.paid_amount',
+                    ])
+                    ->where('sales.customer_id', $customer->id)
+                    ->whereRaw('sale_returns.payable_amount - sale_returns.paid_amount > 0.009')
+                    ->lockForUpdate()
+                    ->get();
+
                 foreach ($payableReturns as $r) {
                     $due = max(0, (float) $r->payable_amount - (float) $r->paid_amount);
                     if ($due <= 0.0001) {
@@ -142,10 +144,10 @@ class CustomerPaymentController extends Controller
 
     public function allPayments(Request $request): View
     {
-        $query = $request->get('search', '');
-        $filter = $request->get('filter', 'all');
-        $startDate = $request->get('start_date');
-        $endDate = $request->get('end_date');
+        $query = $request->input('search', '');
+        $filter = $request->input('filter', 'all');
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
 
         // Get Sale Payments (Received from customers)
         $salePaymentsQuery = SalePayment::with(['sale.customer', 'user'])
@@ -237,10 +239,10 @@ class CustomerPaymentController extends Controller
 
     public function exportPdf(Request $request): Response
     {
-        $query = $request->get('search', '');
-        $filter = $request->get('filter', 'all');
-        $startDate = $request->get('start_date');
-        $endDate = $request->get('end_date');
+        $query = $request->input('search', '');
+        $filter = $request->input('filter', 'all');
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
 
         // Get Sale Payments (Received from customers)
         $salePaymentsQuery = SalePayment::with(['sale.customer', 'user'])
@@ -321,23 +323,52 @@ class CustomerPaymentController extends Controller
             ->sortByDesc('date')
             ->values();
 
-        $pdf = \PDF::loadView('customer-payments.pdf', [
+        $generalSetting = GeneralSetting::first();
+
+        $pdf = Pdf::loadView('customer-payments.pdf', [
             'payments' => $allPayments,
             'search' => $query,
             'filter' => $filter,
             'startDate' => $startDate,
-            'endDate' => $endDate
-        ]);
+            'endDate' => $endDate,
+            'generalSetting' => $generalSetting,
+            'logoSrc' => $this->pdfLogoDataUri($generalSetting),
+        ])->setPaper('a4', 'portrait');
 
         return $pdf->download('customer-payments-' . date('Y-m-d') . '.pdf');
     }
 
+    private function pdfLogoDataUri(?GeneralSetting $generalSetting): ?string
+    {
+        if (! $generalSetting || ! $generalSetting->logo_light) {
+            return null;
+        }
+        $path = public_path($generalSetting->logo_light);
+        if (! is_readable($path)) {
+            return null;
+        }
+        $data = @file_get_contents($path);
+        if ($data === false) {
+            return null;
+        }
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $mime = match ($ext) {
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+            'svg' => 'image/svg+xml',
+            default => 'image/jpeg',
+        };
+
+        return 'data:'.$mime.';base64,'.base64_encode($data);
+    }
+
     public function exportCsv(Request $request): Response
     {
-        $query = $request->get('search', '');
-        $filter = $request->get('filter', 'all');
-        $startDate = $request->get('start_date');
-        $endDate = $request->get('end_date');
+        $query = $request->input('search', '');
+        $filter = $request->input('filter', 'all');
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
 
         // Get Sale Payments (Received from customers)
         $salePaymentsQuery = SalePayment::with(['sale.customer', 'user'])

@@ -34,8 +34,8 @@
                             Site Title <span class="text-red-500 ml-1">*</span>
                         </label>
                         <input type="text" name="site_title" value="{{ old('site_title', $setting->site_title) }}" 
-                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-0 focus:border-[#4634ff] transition-colors text-sm {{ !auth()->user()->hasRole('admin') ? 'bg-gray-50 cursor-not-allowed' : '' }}" 
-                            {{ !auth()->user()->hasRole('admin') ? 'readonly' : '' }} required>
+                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-0 focus:border-[#4634ff] transition-colors text-sm {{ !Auth::user()->hasRole('admin') ? 'bg-gray-50 cursor-not-allowed' : '' }}" 
+                            {{ !Auth::user()->hasRole('admin') ? 'readonly' : '' }} required>
                         @error('site_title') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
                     </div>
 
@@ -45,8 +45,8 @@
                             Full Company Name <span class="text-red-500 ml-1">*</span>
                         </label>
                         <input type="text" name="full_company_name" value="{{ old('full_company_name', $setting->full_company_name) }}" 
-                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-0 focus:border-[#4634ff] transition-colors text-sm {{ !auth()->user()->hasRole('admin') ? 'bg-gray-50 cursor-not-allowed' : '' }}" 
-                            {{ !auth()->user()->hasRole('admin') ? 'readonly' : '' }} required>
+                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-0 focus:border-[#4634ff] transition-colors text-sm {{ !Auth::user()->hasRole('admin') ? 'bg-gray-50 cursor-not-allowed' : '' }}" 
+                            {{ !Auth::user()->hasRole('admin') ? 'readonly' : '' }} required>
                         @error('full_company_name') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
                     </div>
 
@@ -56,14 +56,14 @@
                             Currency <span class="text-red-500 ml-1">*</span>
                         </label>
                         <select name="currency" x-model="selectedCurrency" @change="updateSymbol()"
-                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-0 focus:border-[#4634ff] transition-colors text-sm appearance-none bg-no-repeat bg-right {{ !auth()->user()->hasRole('admin') ? 'bg-gray-50 cursor-not-allowed pointer-events-none' : '' }}" 
+                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-0 focus:border-[#4634ff] transition-colors text-sm appearance-none bg-no-repeat bg-right {{ !Auth::user()->hasRole('admin') ? 'bg-gray-50 cursor-not-allowed pointer-events-none' : '' }}" 
                             style="background-image: url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236B7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%221.5%22 d=%22m6 8 4 4 4-4%22%2F%3E%3C%2Fsvg%3E'); background-position: right 0.5rem center; background-size: 1.5em 1.5em;" 
-                            {{ !auth()->user()->hasRole('admin') ? 'disabled' : '' }} required>
+                            {{ !Auth::user()->hasRole('admin') ? 'disabled' : '' }} required>
                             @foreach($currencies as $code => $symbol)
                                 <option value="{{ $code }}">{{ $code }}</option>
                             @endforeach
                         </select>
-                        @if(!auth()->user()->hasRole('admin'))
+                        @if(!Auth::user()->hasRole('admin'))
                             <input type="hidden" name="currency" value="{{ $setting->currency }}">
                         @endif
                         @error('currency') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
@@ -118,6 +118,22 @@
                             <option value="symbol" {{ $setting->currency_format == 'symbol' ? 'selected' : '' }}>Show Currency Symbol Only</option>
                         </select>
                         @error('currency_format') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
+                    </div>
+
+                    <!-- Notification Retention -->
+                    <div class="space-y-2">
+                        <label class="text-sm font-bold text-gray-700 flex items-center">
+                            Notification Retention (Days)
+                            <svg class="h-4 w-4 ml-1 text-gray-400 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="Notifications older than this will be automatically deleted to save space.">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </label>
+                        <input type="number" name="notification_retention_days" value="{{ old('notification_retention_days', $setting->notification_retention_days) }}" 
+                            min="1" max="365"
+                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-0 focus:border-[#4634ff] transition-colors text-sm" 
+                            placeholder="Default: 30 days">
+                        @error('notification_retention_days') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
+                        <p class="text-[11px] text-gray-500">Notifications older than this will be auto-deleted.</p>
                     </div>
                 </div>
 

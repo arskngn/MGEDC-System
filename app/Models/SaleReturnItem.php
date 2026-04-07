@@ -5,6 +5,24 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property int $sale_return_id
+ * @property int $sale_item_id
+ * @property int $product_id
+ * @property string $product_name
+ * @property string|null $sku
+ * @property float $sale_quantity
+ * @property float $return_quantity
+ * @property string|null $unit_label
+ * @property float $unit_price
+ * @property float $line_total
+ * @property \Carbon\Carbon|null $created_at
+ * @property \Carbon\Carbon|null $updated_at
+ * @property-read \App\Models\SaleReturn $saleReturn
+ * @property-read \App\Models\SaleItem $saleItem
+ * @property-read \App\Models\Product $product
+ */
 class SaleReturnItem extends Model
 {
     protected $fillable = [

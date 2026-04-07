@@ -3,10 +3,13 @@
 namespace App\Services;
 
 use App\Models\Customer;
+use App\Traits\CsvSanitization;
 use Illuminate\Support\Facades\DB;
 
 class CustomerService
 {
+    use CsvSanitization;
+
     public function __construct(protected ImportExportService $importExportService)
     {
     }
@@ -60,7 +63,10 @@ class CustomerService
             ];
         }
 
-        return $this->importExportService->downloadCsv('customers-' . time() . '.csv', $headers, $rows);
+        // Sanitize rows to prevent formula injection in spreadsheet applications
+        $sanitizedRows = $this->sanitizeCsvRows($rows);
+
+        return $this->importExportService->downloadCsv('customers-' . time() . '.csv', $headers, $sanitizedRows);
     }
 
     /**

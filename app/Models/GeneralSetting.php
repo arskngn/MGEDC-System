@@ -26,6 +26,7 @@ class GeneralSetting extends Model
         'login_background',
         'email_notification',
         'sms_notification',
+        'notification_retention_days',
     ];
 
     /**
@@ -106,5 +107,19 @@ class GeneralSetting extends Model
     public function hasCustomLoginBackground()
     {
         return ! is_null($this->attributes['login_background']);
+    }
+
+    /**
+     * Boot method to handle model events
+     */
+    protected static function booted(): void
+    {
+        static::saved(function () {
+            \App\Services\CachedSettingService::invalidate();
+        });
+
+        static::deleted(function () {
+            \App\Services\CachedSettingService::invalidate();
+        });
     }
 }

@@ -63,6 +63,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/system-settings/extensions/toggle/{extension}', [ExtensionController::class, 'toggleStatus'])->name('settings.extensions.toggle')->middleware('permission:Setting Index');
 
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('/notifications/{notification}/mark-as-read', [NotificationController::class, 'markAsRead'])->name('notifications.mark-as-read');
+    Route::post('/notifications/mark-welcome-as-read', [NotificationController::class, 'markWelcomeAsRead'])->name('notifications.mark-welcome-as-read');
+    Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
+    Route::post('/notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('notifications.mark-all-as-read');
+    Route::post('/notifications/delete-all', [NotificationController::class, 'deleteAll'])->name('notifications.delete-all');
+    Route::get('/notifications/unread-count', [NotificationController::class, 'getUnreadCount'])->name('notifications.unread-count');
 
     // Staff Management
     Route::controller(StaffController::class)->group(function () {
@@ -232,6 +238,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/products/{product}/edit', [ProductController::class, 'edit'])->name('products.edit')->middleware('permission:Product Edit');
     Route::put('/products/{product}', [ProductController::class, 'update'])->name('products.update')->middleware('permission:Product Store');
+    
+    // Product Batches
+    Route::post('/products/{product}/batches', [ProductController::class, 'storeBatch'])->name('products.batches.store')->middleware('permission:Product Store');
+    Route::put('/products/{product}/batches/{batch}', [ProductController::class, 'updateBatch'])->name('products.batches.update')->middleware('permission:Product Store');
+    Route::delete('/products/{product}/batches/{batch}', [ProductController::class, 'deleteBatch'])->name('products.batches.delete')->middleware('permission:Product Store');
 
     // Sales (static routes first, then parameterised)
     Route::get('/sales/all', [SaleController::class, 'index'])->name('sales.all')->middleware('permission:All Sales');
@@ -281,6 +292,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/reports/payments/supplier', 'reportSupplierPayments')->name('reports.payments.supplier')->middleware('permission:Supplier Payment Report');
         Route::get('/reports/payments/customer', 'reportCustomerPayments')->name('reports.payments.customer')->middleware('permission:Customer Payment Report');
         Route::get('/reports/stock', 'reportStock')->name('reports.stock')->middleware('permission:Stock Report');
+        Route::get('/reports/stock/export', 'exportStock')->name('reports.stock.export');
 
         Route::get('/reports/data-entry/purchases', 'reportDataEntryPurchases')->name('reports.data-entry.purchases')->middleware('permission:Purchase Data Entry Report');
         Route::get('/reports/data-entry/purchase-return', 'reportDataEntryPurchaseReturn')->name('reports.data-entry.purchases-return')->middleware('permission:Purchase Return Data Entry Report');

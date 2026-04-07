@@ -22,11 +22,21 @@ class SaleService
     public function createSale(array $data): Sale
     {
         $sale = DB::transaction(function () use ($data) {
-            // First, lock and validate stock for all items
+            // First, lock and validate stock for all items using calculated stock (fresh DB data)
             foreach ($data['items'] as $item) {
                 $product = Product::where('id', $item['product_id'])->lockForUpdate()->firstOrFail();
-                if ($product->current_stock < (float)$item['quantity']) {
+                
+                // Check overall calculated stock
+                $calculatedStock = $product->getCalculatedStock();
+                if ($calculatedStock < (float)$item['quantity']) {
                     throw new InsufficientStockException($product);
+                }
+
+                // Also check available batch stock specifically in THIS warehouse
+                $batchStock = $product->getAvailableBatchStock($data['warehouse_id']);
+                if ($batchStock < (float)$item['quantity']) {
+                    // This is a more specific error: we have stock, but not enough in active batches in this warehouse
+                    throw new InsufficientStockException($product, "Insufficient stock in active batches for warehouse.");
                 }
             }
 
@@ -66,15 +76,21 @@ class SaleService
     {
         return DB::transaction(function () use ($sale, $data) {
             // Re-validate stock: we need to account for the items already in this sale
+            // Use calculated stock (fresh DB data) instead of potentially stale current_stock column
             foreach ($data['items'] as $item) {
                 $product = Product::where('id', $item['product_id'])->lockForUpdate()->firstOrFail();
                 $existingItem = $sale->items->where('product_id', $product->id)->first();
                 $existingQty = $existingItem ? (float)$existingItem->quantity : 0;
                 
-                $availableStock = (float)$product->current_stock + $existingQty;
-                
-                if ($availableStock < (float)$item['quantity']) {
+                $calculatedStock = $product->getCalculatedStock();
+                if (($calculatedStock + $existingQty) < (float)$item['quantity']) {
                     throw new InsufficientStockException($product);
+                }
+
+                // Batch stock check
+                $batchStock = $product->getAvailableBatchStock($data['warehouse_id']);
+                if (($batchStock + $existingQty) < (float)$item['quantity']) {
+                    throw new InsufficientStockException($product, "Insufficient batch stock for warehouse.");
                 }
             }
 
@@ -129,9 +145,9 @@ class SaleService
     /**
      * Store a sale return.
      */
-    public function storeReturn(Sale $sale, array $returnItems, float $discount, ?string $note = null): SaleReturn
+    public function storeReturn(Sale $sale, array $returnItems, float $discount, ?string $note = null, float $restockingFee = 0): SaleReturn
     {
-        $saleReturn = DB::transaction(function () use ($sale, $returnItems, $discount, $note) {
+        $saleReturn = DB::transaction(function () use ($sale, $returnItems, $discount, $note, $restockingFee) {
             $subtotal = 0;
             $lines = [];
 
@@ -144,6 +160,7 @@ class SaleService
                 $subtotal += $lineTotal;
 
                 $lines[] = [
+                    'sale_item_id' => $saleItem->id, // Add this
                     'product_id' => $saleItem->product_id,
                     'product_name' => $saleItem->product_name,
                     'sku' => $saleItem->sku,
@@ -156,7 +173,8 @@ class SaleService
             }
 
             $discount = round($discount, 2);
-            $payable = round(max(0, $subtotal - $discount), 2);
+            $restockingFee = round($restockingFee, 2);
+            $payable = round(max(0, $subtotal - $discount - $restockingFee), 2);
 
             $saleReturn = SaleReturn::create([
                 'sale_id' => $sale->id,
@@ -165,6 +183,7 @@ class SaleService
                 'warehouse_id' => $sale->warehouse_id,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
+                'restocking_fee' => $restockingFee,
                 'payable_amount' => $payable,
                 'paid_amount' => 0,
                 'note' => $note,

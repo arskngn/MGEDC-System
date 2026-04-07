@@ -8,10 +8,11 @@ class InsufficientStockException extends Exception
 {
     protected $product;
 
-    public function __construct($product)
+    public function __construct($product, ?string $message = null)
     {
         $this->product = $product;
-        parent::__construct("Insufficient stock for product: {$product->name}. Current stock: {$product->current_stock}");
+        $message = $message ?? "Insufficient stock for product: {$product->name}. Current stock: {$product->current_stock}";
+        parent::__construct($message);
     }
 
     public function getProduct()

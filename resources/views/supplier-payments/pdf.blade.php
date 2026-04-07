@@ -4,123 +4,120 @@
     <meta charset="utf-8">
     <title>Supplier Payments Report</title>
     <style>
-        body {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            font-size: 12px;
-            line-height: 1.4;
-            color: #333;
+        body { 
+            font-family: DejaVu Sans, sans-serif; 
+            font-size: 11px; 
+            color: #111; 
             margin: 0;
-            padding: 20px;
+            padding: 0;
         }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #5542ff;
-            padding-bottom: 20px;
+        .header { 
+            width: 100%; 
+            margin-bottom: 20px; 
         }
-        .header h1 {
+        .header-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+        }
+        .title { 
+            font-size: 18px; 
+            font-weight: bold; 
             color: #0a1233;
-            font-size: 24px;
-            margin: 0 0 10px 0;
+            vertical-align: top;
         }
-        .header p {
-            margin: 5px 0;
-            color: #666;
+        .brand { 
+            text-align: right; 
+            vertical-align: top; 
         }
-        .filters {
-            margin-bottom: 20px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 4px;
+        .brand img { 
+            max-height: 50px; 
+            max-width: 150px;
+            margin-bottom: 4px;
         }
-        .filters span {
-            margin-right: 20px;
+        .brand-name { 
+            font-size: 14px; 
+            font-weight: bold; 
+            color: #0a1233; 
+            margin: 4px 0 0 0;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
+        .company { 
+            font-size: 10px; 
+            color: #666; 
+            margin: 2px 0;
         }
-        th {
-            background: #5542ff;
-            color: white;
-            font-weight: bold;
-            text-align: center;
-            padding: 12px 8px;
-            font-size: 11px;
+        table.data { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 16px;
+        }
+        table.data th { 
+            background: #2563eb; 
+            color: #fff; 
+            padding: 10px 6px; 
+            text-align: center; 
+            font-size: 10px; 
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            font-weight: bold;
         }
-        td {
-            padding: 10px 8px;
+        table.data td { 
+            padding: 8px 6px; 
+            border-bottom: 1px solid #e5e7eb;
             text-align: center;
-            border-bottom: 1px solid #ddd;
-            vertical-align: middle;
         }
-        tr:nth-child(even) {
-            background: #f8f9fa;
+        table.data tr:nth-child(even) td { 
+            background: #f8fafc; 
         }
-        .text-red {
-            color: #dc3545;
+        .text-left { text-align: left; }
+        .text-right { text-align: right; }
+        .badge { 
+            padding: 2px 6px; 
+            border-radius: 3px; 
+            font-size: 9px; 
             font-weight: bold;
-        }
-        .text-green {
-            color: #28a745;
-            font-weight: bold;
-        }
-        .badge {
-            padding: 2px 6px;
-            border-radius: 10px;
-            font-size: 10px;
-            font-weight: bold;
+            white-space: nowrap;
         }
         .badge-red {
-            background: #f8d7da;
-            color: #721c24;
+            background: #fee2e2;
+            color: #991b1b;
         }
         .badge-green {
-            background: #d4edda;
-            color: #155724;
+            background: #dcfce7;
+            color: #166534;
         }
         .footer {
-            margin-top: 30px;
+            margin-top: 20px;
             text-align: center;
             color: #666;
-            font-size: 10px;
+            font-size: 9px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 10px;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Supplier Payments Report</h1>
-        <p>Generated on: {{ now()->format('Y-m-d H:i:s') }}</p>
-    </div>
+    <table class="header-table">
+        <tr>
+            <td class="title">Supplier Payments</td>
+            <td class="brand">
+                @if(!empty($logoSrc))
+                    <img src="{{ $logoSrc }}" alt="Logo">
+                @endif
+                <div class="brand-name">{{ $generalSetting->site_title ?? 'MGEDC' }}</div>
+                <div class="company">{{ $generalSetting->full_company_name ?? 'Mindoro Golden Eagle Distribution Corporation' }}</div>
+            </td>
+        </tr>
+    </table>
 
-    @if($filter !== 'all' || $startDate || $endDate)
-        <div class="filters">
-            <strong>Filters Applied:</strong>
-            @if($filter !== 'all')
-                <span>Type: {{ $filter === 'paid_for_purchase' ? 'Paid For Purchase' : 'Received For Purchase Return' }}</span>
-            @endif
-            @if($startDate)
-                <span>From: {{ $startDate }}</span>
-            @endif
-            @if($endDate)
-                <span>To: {{ $endDate }}</span>
-            @endif
-        </div>
-    @endif
-
-    <table>
+    <table class="data">
         <thead>
             <tr>
-                <th>S.N.</th>
-                <th>Invoice No.</th>
+                <th style="width: 28px;">S.N.</th>
+                <th>Invoice</th>
                 <th>Date</th>
-                <th>Supplier</th>
-                <th>TRX</th>
-                <th>Reason</th>
-                <th>Amount</th>
+                <th style="width: 100px;">Supplier</th>
+                <th>Trx</th>
+                <th style="width: 80px;">Reason</th>
+                <th class="text-right">Amount</th>
             </tr>
         </thead>
         <tbody>
@@ -130,16 +127,16 @@
                 @endphp
                 <tr>
                     <td>{{ $i + 1 }}</td>
-                    <td>{{ $payment['invoice_no'] }}</td>
+                    <td class="text-left">{{ $payment['invoice_no'] }}</td>
                     <td>{{ $payment['date'] }}</td>
-                    <td>{{ $payment['supplier'] }}</td>
-                    <td>{{ $payment['trx'] }}</td>
+                    <td class="text-left">{{ $payment['supplier'] }}</td>
+                    <td class="text-left">{{ $payment['trx'] }}</td>
                     <td>
                         <span class="badge {{ $isPayment ? 'badge-red' : 'badge-green' }}">
                             {{ $payment['reason'] }}
                         </span>
                     </td>
-                    <td class="{{ $isPayment ? 'text-red' : 'text-green' }}">
+                    <td class="text-right" style="color: {{ $isPayment ? '#dc2626' : '#16a34a' }}; font-weight: bold;">
                         {{ formatCurrency($payment['amount']) }}
                     </td>
                 </tr>

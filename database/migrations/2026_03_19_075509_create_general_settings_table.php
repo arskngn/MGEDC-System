@@ -28,7 +28,7 @@ return new class extends Migration
             'currency' => 'PHP',
             'currency_symbol' => '₱',
             'timezone' => 'Asia/Manila',
-            'records_per_page' => 15,
+            'records_per_page' => 20,
             'currency_format' => 'both',
             'created_at' => now(),
             'updated_at' => now(),

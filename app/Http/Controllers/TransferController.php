@@ -62,12 +62,52 @@ class TransferController extends Controller
             'note' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|integer|exists:products,id',
+            'items.*.product_batch_id' => 'required|integer|exists:product_batches,id',
             'items.*.quantity' => 'required|numeric|min:0.01',
         ]);
 
         $this->transferService->createTransfer($validated);
 
         return redirect()->route('transfers.index')->with('success', 'Transfer created successfully.');
+    }
+
+    public function searchProducts(Request $request)
+    {
+        $q = $request->string('q')->trim()->value();
+        $warehouseId = $request->integer('warehouse_id');
+
+        $products = Product::query()
+            ->with(['unit', 'batches' => function ($query) use ($warehouseId) {
+                $query->where('warehouse_id', $warehouseId)
+                    ->whereIn('status', ['active', 'expiring'])
+                    ->whereRaw('quantity > quantity_sold');
+            }])
+            ->where(function ($query) use ($q) {
+                $query->where('name', 'like', '%'.$q.'%')
+                    ->orWhere('sku', 'like', '%'.$q.'%');
+            })
+            ->orderBy('name')
+            ->limit(25)
+            ->get()
+            ->map(function ($p) {
+                return [
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'sku' => $p->sku,
+                    'unit_label' => $p->unit->short_name ?? $p->unit->name,
+                    'in_stock' => $p->current_stock,
+                    'batches' => $p->batches->map(function ($b) {
+                        return [
+                            'id' => $b->id,
+                            'batch_number' => $b->batch_number,
+                            'expiration_date' => $b->expiration_date->format('Y-m-d'),
+                            'available' => $b->quantity - $b->quantity_sold,
+                        ];
+                    }),
+                ];
+            });
+
+        return response()->json($products);
     }
 
     public function edit(Transfer $transfer): View
@@ -103,41 +143,6 @@ class TransferController extends Controller
         $this->transferService->deleteTransfer($transfer);
 
         return redirect()->route('transfers.index')->with('success', 'Transfer deleted successfully.');
-    }
-
-    public function searchProducts(Request $request)
-    {
-        $q = $request->string('q')->trim()->value();
-        $warehouseId = $request->input('warehouse_id');
-
-        $products = Product::query()
-            ->where('status', true)
-            ->where(function ($query) use ($q) {
-                $query->where('name', 'like', '%'.$q.'%')
-                    ->orWhere('sku', 'like', '%'.$q.'%');
-            })
-            ->orderBy('name')
-            ->limit(25)
-            ->get()
-            ->map(function (Product $p) use ($warehouseId) {
-                $inStock = 0;
-                if ($warehouseId) {
-                    $stock = $p->stocks()->where('warehouse_id', $warehouseId)->first();
-                    $inStock = $stock?->quantity ?? 0;
-                } else {
-                    $inStock = $p->current_stock;
-                }
-                
-                return [
-                    'id' => $p->id,
-                    'name' => $p->name,
-                    'sku' => $p->sku,
-                    'unit_label' => $p->unit?->short_name ?? $p->unit?->name,
-                    'in_stock' => $inStock,
-                ];
-            });
-
-        return response()->json($products);
     }
 
     public function exportPdfInvoice(Transfer $transfer)

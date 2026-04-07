@@ -29,7 +29,6 @@
             async searchProducts() {
                 clearTimeout(this.searchTimer);
                 const q = this.productQuery.trim();
-                if (q.length < 1) { this.searchResults = []; return; }
                 this.searchTimer = setTimeout(async () => {
                     try {
                         const r = await fetch('{{ route('purchases.products.search') }}?q=' + encodeURIComponent(q), { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
@@ -126,7 +125,7 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">Product <span class="text-red-500">*</span></label>
                 <div class="flex rounded-lg border border-gray-200 overflow-hidden" :class="hasReturns ? 'opacity-50 pointer-events-none' : ''">
                     <span class="px-3 py-2 bg-gray-100 text-gray-400"><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg></span>
-                    <input type="text" x-model="productQuery" @input="searchProducts()" autocomplete="off" placeholder="Product Name or SKU" class="flex-1 px-3 py-2 text-sm focus:outline-none" />
+                    <input type="text" x-model="productQuery" @input="searchProducts()" @click="searchProducts()" autocomplete="off" placeholder="Product Name or SKU" class="flex-1 px-3 py-2 text-sm focus:outline-none" />
                 </div>
                 <div x-show="searchResults.length && !hasReturns" x-cloak class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
                     <template x-for="p in searchResults" :key="p.id">

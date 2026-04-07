@@ -45,7 +45,6 @@
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
             "composer install",
             "@php artisan key:generate --ansi",
-            "@php artisan storage:link --ansi",
             "@dompdf-setup",
             "npm install",
             "npm run build",
@@ -58,11 +57,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74,#818cf8\" \"php artisan serve\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm run dev\" \"php artisan reverb:start\" --names=server,queue,logs,vite,reverb --kill-others"
-        ],
-        "tabs": [
-            "Composer\\Config::disableProcessTimeout",
-            "wt -w 0 nt -d . --title \"Vite\" powershell -NoExit -Command \"npm run dev\" ; nt -d . --title \"Server\" powershell -NoExit -Command \"php artisan serve\" ; nt -d . --title \"Reverb\" powershell -NoExit -Command \"php artisan reverb:start\""
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,queue,logs,vite --kill-others"
         ],
         "test": [
             "@php artisan config:clear --ansi",

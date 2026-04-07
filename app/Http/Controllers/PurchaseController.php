@@ -134,17 +134,20 @@ class PurchaseController extends Controller
     public function searchProducts(Request $request)
     {
         $q = $request->string('q')->trim()->value();
-        if (strlen($q) < 1) {
-            return response()->json([]);
-        }
 
         $products = Product::query()
             ->with('unit')
-            ->where(function ($query) use ($q) {
-                $query->where('name', 'like', '%'.$q.'%')
-                    ->orWhere('sku', 'like', '%'.$q.'%');
+            ->when($q !== '', function ($query) use ($q) {
+                $query->where(function ($query) use ($q) {
+                    $query->where('name', 'like', '%' . $q . '%')
+                        ->orWhere('sku', 'like', '%' . $q . '%');
+                });
             })
-            ->orderBy('name')
+            ->when($q === '', function ($query) {
+                $query->orderByDesc('id');
+            }, function ($query) {
+                $query->orderBy('name');
+            })
             ->limit(25)
             ->get()
             ->map(fn (Product $p) => [

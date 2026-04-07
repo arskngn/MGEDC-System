@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SaleResource;
+use App\Models\GeneralSetting;
 use App\Models\Sale;
 use App\Services\SaleService;
 use Illuminate\Http\JsonResponse;
@@ -21,9 +22,10 @@ class SaleApiController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
+        $perPage = GeneralSetting::first()?->records_per_page ?? 20;
         $sales = Sale::with(['customer', 'warehouse'])
             ->orderBy('sale_date', 'desc')
-            ->paginate(15);
+            ->paginate($perPage);
 
         return SaleResource::collection($sales);
     }

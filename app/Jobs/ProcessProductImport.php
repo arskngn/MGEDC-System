@@ -40,9 +40,9 @@ class ProcessProductImport implements ShouldQueue
         $delimiter = $opened['delimiter'];
         $map = $opened['map'];
 
-        $categories = Category::all()->keyBy(fn($c) => strtolower($c->name));
-        $brands = Brand::all()->keyBy(fn($b) => strtolower($b->name));
-        $units = Unit::all();
+        $categories = getCachedCategories(keyedByName: true);
+        $brands = getCachedBrands(keyedByName: true);
+        $units = getCachedUnits();
         $unitByShort = $units->keyBy(fn($u) => strtolower($u->short_name));
         $unitByName = $units->keyBy(fn($u) => strtolower($u->name));
 

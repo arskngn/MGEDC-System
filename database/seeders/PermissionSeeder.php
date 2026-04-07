@@ -46,7 +46,7 @@ class PermissionSeeder extends Seeder
             ],
             'System' => ['System Info', 'System Server Info', 'System Optimize', 'System Optimize Clear'],
             'Staff' => ['All Staffs', 'Save Staff', 'Staff Status', 'Staff Login'],
-            'StockReport' => ['Stock Report', 'Stock Report PDF', 'Stock Report CSV'],
+            'StockReport' => ['Stock Report', 'Download Stock Report PDF', 'Download Stock Report CSV'],
         ];
 
         foreach ($permissions as $module => $perms) {

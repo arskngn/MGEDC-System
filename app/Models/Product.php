@@ -5,10 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\PurchaseReturnItem;
+use App\Models\ProductBatch;
 use App\Models\SaleItem;
 use App\Models\SaleReturnItem;
 use App\Models\AdjustmentItem;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @property int $id
@@ -23,6 +26,7 @@ use App\Models\AdjustmentItem;
  * @property string|null $note
  * @property float $current_stock
  * @property float $total_sold
+ * @property \Carbon\Carbon|null $deleted_at
  * @property Category $category
  * @property Brand $brand
  * @property Unit $unit
@@ -31,6 +35,7 @@ use App\Models\AdjustmentItem;
  */
 class Product extends Model
 {
+    use SoftDeletes;
     protected $fillable = [
         'name',
         'sku',
@@ -79,25 +84,58 @@ class Product extends Model
         return $this->hasMany(SaleItem::class);
     }
 
+    public function batches(): HasMany
+    {
+        return $this->hasMany(ProductBatch::class);
+    }
+
     /**
-     * Stock from purchases minus purchase returns, minus sales, plus sale returns, and adjustments.
+     * Calculate stock from purchases minus purchase returns, minus sales, plus sale returns, and adjustments.
+     * Uses a single database query with UNION and aggregates for optimal performance.
      */
     public function getCalculatedStock(): float
     {
-        $purchased = (float) $this->purchaseItems()->sum('quantity');
-        $purchaseReturned = (float) PurchaseReturnItem::where('product_id', $this->id)->sum('return_quantity');
-        $sold = (float) SaleItem::where('product_id', $this->id)->sum('quantity');
-        $saleReturned = (float) SaleReturnItem::where('product_id', $this->id)->sum('return_quantity');
-        
-        // Adjustments
-        $adjustmentAddition = (float) AdjustmentItem::where('product_id', $this->id)
-            ->where('type', \App\Enums\AdjustmentType::Addition->value)
-            ->sum('adjust_qty');
-        $adjustmentSubtraction = (float) AdjustmentItem::where('product_id', $this->id)
-            ->where('type', \App\Enums\AdjustmentType::Subtraction->value)
-            ->sum('adjust_qty');
+        $result = DB::selectOne(
+            'SELECT 
+                COALESCE(SUM(quantity), 0) as purchased,
+                COALESCE(SUM(CASE WHEN type = \'purchase_return\' THEN quantity ELSE 0 END), 0) as purchase_returned,
+                COALESCE(SUM(CASE WHEN type = \'sale\' THEN quantity ELSE 0 END), 0) as sold,
+                COALESCE(SUM(CASE WHEN type = \'sale_return\' THEN quantity ELSE 0 END), 0) as sale_returned,
+                COALESCE(SUM(CASE WHEN type = \'adjustment_add\' THEN quantity ELSE 0 END), 0) as adjustment_add,
+                COALESCE(SUM(CASE WHEN type = \'adjustment_sub\' THEN quantity ELSE 0 END), 0) as adjustment_sub
+            FROM (
+                SELECT quantity, \'purchase\' as type FROM purchase_items WHERE product_id = ?
+                UNION ALL
+                SELECT return_quantity, \'purchase_return\' as type FROM purchase_return_items WHERE product_id = ?
+                UNION ALL
+                SELECT quantity, \'sale\' as type FROM sale_items WHERE product_id = ?
+                UNION ALL
+                SELECT return_quantity, \'sale_return\' as type FROM sale_return_items WHERE product_id = ?
+                UNION ALL
+                SELECT quantity, CONCAT(\'adjustment_\', LOWER(type)) as type FROM adjustment_items WHERE product_id = ?
+            ) as stock_movements',
+            [$this->id, $this->id, $this->id, $this->id, $this->id]
+        );
 
-        return round($purchased - $purchaseReturned - $sold + $saleReturned + $adjustmentAddition - $adjustmentSubtraction, 4);
+        $purchased = (float) $result->purchased ?? 0;
+        $purchaseReturned = (float) $result->purchase_returned ?? 0;
+        $sold = (float) $result->sold ?? 0;
+        $saleReturned = (float) $result->sale_returned ?? 0;
+        $adjustmentAdd = (float) $result->adjustment_add ?? 0;
+        $adjustmentSub = (float) $result->adjustment_sub ?? 0;
+
+        return round($purchased - $purchaseReturned - $sold + $saleReturned + $adjustmentAdd - $adjustmentSub, 4);
+    }
+
+    /**
+     * Get the total available stock from all active batches in a specific warehouse.
+     */
+    public function getAvailableBatchStock(int $warehouseId): float
+    {
+        return (float) $this->batches()
+            ->where('warehouse_id', $warehouseId)
+            ->whereIn('status', ['active', 'expiring'])
+            ->sum(DB::raw('quantity - quantity_sold'));
     }
 
     /**

@@ -10,6 +10,8 @@ use App\Models\Sale;
 use App\Models\SaleReturn;
 use App\Models\Purchase;
 use App\Models\PurchaseReturn;
+use App\Models\ProductBatch;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class DashboardService
@@ -61,5 +63,30 @@ class DashboardService
             ->orderBy('sale_date', 'desc')
             ->limit($limit)
             ->get();
+    }
+
+    /**
+     * Get expiring product batches for the dashboard.
+     */
+    public function getExpiringBatches(int $limit = 5)
+    {
+        $now = Carbon::now();
+        $thirtyDaysFromNow = $now->clone()->addDays(30);
+
+        return ProductBatch::with(['product', 'warehouse'])
+            ->where('expiration_date', '<=', $thirtyDaysFromNow)
+            ->where('expiration_date', '>=', $now)
+            ->orderBy('expiration_date', 'asc')
+            ->limit($limit)
+            ->get()
+            ->map(function ($batch) {
+                $daysLeft = $batch->expiration_date->diffInDays(now(), false);
+                $status = $daysLeft < 0 ? 'expired' : ($daysLeft < 5 ? 'urgent' : 'warning');
+                return [
+                    'batch' => $batch,
+                    'days_left' => $daysLeft,
+                    'status' => $status,
+                ];
+            });
     }
 }

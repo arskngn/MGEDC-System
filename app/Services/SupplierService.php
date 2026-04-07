@@ -3,10 +3,13 @@
 namespace App\Services;
 
 use App\Models\Supplier;
+use App\Traits\CsvSanitization;
 use Illuminate\Support\Facades\DB;
 
 class SupplierService
 {
+    use CsvSanitization;
+
     public function __construct(protected ImportExportService $importExportService)
     {
     }
@@ -63,7 +66,10 @@ class SupplierService
             ];
         }
 
-        return $this->importExportService->downloadCsv('suppliers-' . time() . '.csv', $headers, $rows);
+        // Sanitize rows to prevent formula injection in spreadsheet applications
+        $sanitizedRows = $this->sanitizeCsvRows($rows);
+
+        return $this->importExportService->downloadCsv('suppliers-' . time() . '.csv', $headers, $sanitizedRows);
     }
 
     /**

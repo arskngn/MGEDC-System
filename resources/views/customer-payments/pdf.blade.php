@@ -4,153 +4,155 @@
     <meta charset="utf-8">
     <title>Customer Payments Report</title>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        body { 
+            font-family: DejaVu Sans, sans-serif; 
+            font-size: 11px; 
+            color: #111; 
             margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
+            padding: 0;
         }
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        .header { 
+            width: 100%; 
+            margin-bottom: 20px; 
         }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #5542ff;
-            padding-bottom: 20px;
+        .header-table { 
+            width: 100%; 
+            border-collapse: collapse; 
         }
-        .header h1 {
+        .title { 
+            font-size: 18px; 
+            font-weight: bold; 
             color: #0a1233;
-            margin: 0;
-            font-size: 28px;
-            font-weight: bold;
+            vertical-align: top;
         }
-        .header p {
-            color: #666;
-            margin: 5px 0 0;
-            font-size: 14px;
+        .brand { 
+            text-align: right; 
+            vertical-align: top; 
         }
-        .filters {
-            margin-bottom: 20px;
-            padding: 15px;
-            background: #f8f9ff;
-            border-radius: 5px;
-            border-left: 4px solid #5542ff;
+        .brand img { 
+            max-height: 50px; 
+            max-width: 150px;
+            margin-bottom: 4px;
         }
-        .filters p {
-            margin: 5px 0;
-            font-size: 13px;
-            color: #555;
+        .brand-name { 
+            font-size: 14px; 
+            font-weight: bold; 
+            color: #0a1233; 
+            margin: 4px 0 0 0;
         }
-        .filters strong {
-            color: #333;
+        .company { 
+            font-size: 10px; 
+            color: #666; 
+            margin: 2px 0;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
+        table.data { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 16px;
         }
-        th {
-            background: #5542ff;
-            color: white;
-            padding: 12px 8px;
-            text-align: center;
-            font-weight: bold;
-            font-size: 11px;
+        table.data th { 
+            background: #2563eb; 
+            color: #fff; 
+            padding: 10px 6px; 
+            text-align: center; 
+            font-size: 10px; 
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        td {
-            padding: 10px 8px;
-            text-align: center;
-            border-bottom: 1px solid #e5e7eb;
-            font-size: 12px;
-        }
-        tr:nth-child(even) {
-            background-color: #f9fafb;
-        }
-        .text-left {
-            text-align: left;
-        }
-        .font-bold {
             font-weight: bold;
         }
-        .text-blue {
-            color: #2563eb;
-        }
-        .text-green {
-            color: #059669;
-        }
-        .text-red {
-            color: #dc2626;
-        }
-        .badge {
-            padding: 2px 6px;
-            border-radius: 10px;
-            font-size: 10px;
-            font-weight: 500;
-        }
-        .badge-receipt {
-            background: #d1fae5;
-            color: #059669;
-        }
-        .badge-payment {
-            background: #fee2e2;
-            color: #dc2626;
-        }
-        .no-data {
+        table.data td { 
+            padding: 8px 6px; 
+            border-bottom: 1px solid #e5e7eb;
             text-align: center;
-            padding: 40px;
-            color: #666;
-            font-style: italic;
+        }
+        table.data tr:nth-child(even) td { 
+            background: #f8fafc; 
+        }
+        .text-left { text-align: left; }
+        .text-right { text-align: right; }
+        .badge { 
+            padding: 2px 6px; 
+            border-radius: 3px; 
+            font-size: 9px; 
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .badge-green {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .badge-red {
+            background: #fee2e2;
+            color: #991b1b;
         }
         .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
+            margin-top: 20px;
             text-align: center;
             color: #666;
-            font-size: 12px;
+            font-size: 9px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 10px;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Customer Payments Report</h1>
-            <p>Generated on {{ date('Y-m-d H:i:s') }}</p>
-        </div>
+    <table class="header-table">
+        <tr>
+            <td class="title">Customer Payments</td>
+            <td class="brand">
+                @if(!empty($logoSrc))
+                    <img src="{{ $logoSrc }}" alt="Logo">
+                @endif
+                <div class="brand-name">{{ $generalSetting->site_title ?? 'MGEDC' }}</div>
+                <div class="company">{{ $generalSetting->full_company_name ?? 'Mindoro Golden Eagle Distribution Corporation' }}</div>
+            </td>
+        </tr>
+    </table>
 
-        @if($search || $filter !== 'all' || $startDate || $endDate)
-            <div class="filters">
-                <p><strong>Filters Applied:</strong></p>
-                @if($search)
-                    <p>Search: {{ $search }}</p>
-                @endif
-                @if($filter !== 'all')
-                    <p>Filter: {{ $filter === 'received_from_customer' ? 'Received From Customer' : 'Paid For Sale Return' }}</p>
-                @endif
-                @if($startDate && $endDate)
-                    <p>Date Range: {{ $startDate }} to {{ $endDate }}</p>
-                @elseif($startDate)
-                    <p>From: {{ $startDate }}</p>
-                @elseif($endDate)
-                    <p>To: {{ $endDate }}</p>
-                @endif
-            </div>
-        @endif
-
-        <table>
-            <thead>
+    <table class="data">
+        <thead>
+            <tr>
+                <th style="width: 28px;">S.N.</th>
+                <th>Invoice</th>
+                <th>Date</th>
+                <th style="width: 100px;">Customer</th>
+                <th>Trx</th>
+                <th style="width: 80px;">Reason</th>
+                <th class="text-right">Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse($payments as $i => $payment)
+                @php
+                    $isReceipt = $payment['type'] === 'receipt';
+                @endphp
                 <tr>
-                    <th>S.N.</th>
-                    <th>Invoice No.</th>
-                    <th>Date</th>
+                    <td>{{ $i + 1 }}</td>
+                    <td class="text-left">{{ $payment['invoice_no'] }}</td>
+                    <td>{{ $payment['date']->format('m/d/Y') }}</td>
+                    <td class="text-left">{{ $payment['customer']->name }}</td>
+                    <td class="text-left">{{ $payment['trx'] }}</td>
+                    <td>
+                        <span class="badge {{ $isReceipt ? 'badge-green' : 'badge-red' }}">
+                            {{ $payment['reason'] }}
+                        </span>
+                    </td>
+                    <td class="text-right" style="color: {{ $isReceipt ? '#16a34a' : '#dc2626' }}; font-weight: bold;">
+                        {{ formatCurrency($payment['amount']) }}
+                    </td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 30px;">No customer payments found.</td>
+                </tr>
+        </tbody>
+    </table>
+
+    <div class="footer">
+        <p>This report was generated from MGEDC Inventory Management System</p>
+    </div>
+</body>
+</html>
+
                     <th>Customer</th>
                     <th>TRX</th>
                     <th>Reason</th>
